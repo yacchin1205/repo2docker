@@ -68,7 +68,7 @@ class RDM(ContentProvider):
         yield "Fetching RDM directory {} on {} at {}.\n".format(
             path, project_id, api_url
         )
-        osf = OSF(token=os.getenv("OSF_TOKEN"), base_url=api_url)
+        osf = OSF(token=host["token"] if "token" in host else os.getenv("OSF_TOKEN"), base_url=api_url)
         project = osf.project(project_id)
 
         if len(path):
