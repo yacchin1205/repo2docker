@@ -27,14 +27,16 @@ class RDM(ContentProvider):
         if "RDM_HOSTS" in os.environ:
             with open(os.path.expanduser(os.environ["RDM_HOSTS"])) as f:
                 self.hosts = json.load(f)
-                if isinstance(self.hosts, list):
-                    for host in self.hosts:
-                        if "hostname" not in host:
-                            raise ValueError("No hostname: {}".format(json.dumps(host)))
-                        if not isinstance(host["hostname"], list):
-                            raise ValueError("hostname should be list of string: {}".format(json.dumps(host["hostname"])))
-                        if "api" not in host:
-                            raise ValueError("No api: {}".format(json.dumps(host)))
+        if "RDM_HOSTS_JSON" in os.environ:
+            self.hosts = json.loads(os.environ["RDM_HOSTS_JSON"])
+        if isinstance(self.hosts, list):
+            for host in self.hosts:
+                if "hostname" not in host:
+                    raise ValueError("No hostname: {}".format(json.dumps(host)))
+                if not isinstance(host["hostname"], list):
+                    raise ValueError("hostname should be list of string: {}".format(json.dumps(host["hostname"])))
+                if "api" not in host:
+                    raise ValueError("No api: {}".format(json.dumps(host)))
 
     def detect(self, source, ref=None, extra_args=None):
         """Trigger this provider for directory on RDM"""
