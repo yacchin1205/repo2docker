@@ -55,6 +55,7 @@ setup(
         "ruamel.yaml>=0.15",
         "toml",
         "semver",
+        "osfclient @ git+https://github.com/RCOSDP/rdmclient.git"
     ],
     python_requires=">=3.5",
     author="Project Jupyter Contributors",
