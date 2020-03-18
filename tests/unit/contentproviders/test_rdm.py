@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 
 from unittest.mock import patch, MagicMock
@@ -15,30 +16,34 @@ def test_detect_rdm_url():
     assert spec is not None, spec
     assert spec["project_id"] == "x1234"
     assert spec["path"] == ""
+    assert re.match(r'^[0-9A-Fa-f\-]+$', spec["uuid"]) is not None
     assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
 
     rdm = RDM()
-    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234", "test/xxx")
+    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234/files/test/xxx", "X1234")
 
     assert spec is not None, spec
     assert spec["project_id"] == "x1234"
     assert spec["path"] == "test/xxx"
+    assert spec["uuid"] == "X1234"
     assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
 
     rdm = RDM()
-    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234", "/test/xxx")
+    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234/test/xxx", "A5678")
 
     assert spec is not None, spec
     assert spec["project_id"] == "x1234"
     assert spec["path"] == "test/xxx"
+    assert spec["uuid"] == "A5678"
     assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
 
     rdm = RDM()
-    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234/", "/test/xxx")
+    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234/files/test", "X1234")
 
     assert spec is not None, spec
     assert spec["project_id"] == "x1234"
-    assert spec["path"] == "test/xxx"
+    assert spec["path"] == "test"
+    assert spec["uuid"] == "X1234"
     assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
 
 
@@ -72,7 +77,7 @@ def test_detect_external_rdm_url():
             assert spec["host"]["api"] == "https://api.test1.some.host.nii.ac.jp/v2/"
 
             rdm = RDM()
-            spec = rdm.detect("https://test1.some.host.nii.ac.jp/x1234", "test/xxx")
+            spec = rdm.detect("https://test1.some.host.nii.ac.jp/x1234/files/test/xxx", "")
 
             assert spec is not None, spec
             assert spec["project_id"] == "x1234"
@@ -80,7 +85,7 @@ def test_detect_external_rdm_url():
             assert spec["host"]["api"] == "https://api.test1.some.host.nii.ac.jp/v2/"
 
             rdm = RDM()
-            spec = rdm.detect("https://test1.some.host.nii.ac.jp/x1234", "/test/xxx")
+            spec = rdm.detect("https://test1.some.host.nii.ac.jp/x1234/test/xxx", "")
 
             assert spec is not None, spec
             assert spec["project_id"] == "x1234"

@@ -44,12 +44,14 @@ class RDM(ContentProvider):
             if any([source.startswith(s) for s in host["hostname"]]):
                 u = urlparse(source)
                 path = u.path[1:] if u.path.startswith('/') else u.path
-                self.project_id = path.split('/')[0]
-                if ref is None:
-                    self.path = ''
+                if '/' in path:
+                    self.project_id, self.path = path.split('/', 1)
+                    if self.path.startswith('files/'):
+                        self.path = self.path[len('files/'):]
                 else:
-                    self.path = ref[1:] if ref.startswith('/') else ref
-                self.uuid = str(uuid.uuid1())
+                    self.project_id = path
+                    self.path = ''
+                self.uuid = ref if ref is not None else str(uuid.uuid1())
                 return {
                     "project_id": self.project_id,
                     "path": self.path,
