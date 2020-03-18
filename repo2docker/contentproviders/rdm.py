@@ -73,7 +73,7 @@ class RDM(ContentProvider):
 
         if len(path):
             storage = project.storage(path[:path.index("/")] if "/" in path else path)
-            subpath = path[path.index("/"):] if "/" in path else None
+            subpath = path[path.index("/"):] if "/" in path else "/"
             for line in self._fetch_storage(storage, output_dir, subpath):
                 yield line
         else:
@@ -83,6 +83,8 @@ class RDM(ContentProvider):
 
     def _fetch_storage(self, storage, output_dir, path=None):
         if path is None:
+            path_filter = None
+        elif path == "/":
             path_filter = None
         else:
             path = path if path.endswith("/") else path + "/"
