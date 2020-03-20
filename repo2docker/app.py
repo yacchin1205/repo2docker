@@ -145,6 +145,7 @@ class Repo2Docker(Application):
         [
             contentproviders.Local,
             contentproviders.RDM,
+            contentproviders.WEKO3,
             contentproviders.Zenodo,
             contentproviders.Figshare,
             contentproviders.Dataverse,
