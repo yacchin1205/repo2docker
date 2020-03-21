@@ -8,6 +8,7 @@ from urllib import request
 from urllib.request import Request
 from urllib.parse import urlparse
 
+from .. import __version__
 from .base import ContentProvider
 
 
@@ -90,10 +91,6 @@ class WEKO3(ContentProvider):
 
     def urlopen(self, req, headers=None):
         """A urlopen() helper"""
-        # someone passed a string, not a request
-        if not isinstance(req, request.Request):
-            req = request.Request(req)
-
         req.add_header("User-Agent", "repo2docker {}".format(__version__))
         if headers is not None:
             for key, value in headers.items():
