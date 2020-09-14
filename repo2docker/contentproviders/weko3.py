@@ -13,8 +13,7 @@ from .base import ContentProvider
 
 
 class WEKO3(ContentProvider):
-    """Provide contents of WEKO3.
-    """
+    """Provide contents of WEKO3."""
 
     def __init__(self):
         self.hosts = [
@@ -35,7 +34,11 @@ class WEKO3(ContentProvider):
                 if "hostname" not in host:
                     raise ValueError("No hostname: {}".format(json.dumps(host)))
                 if not isinstance(host["hostname"], list):
-                    raise ValueError("hostname should be list of string: {}".format(json.dumps(host["hostname"])))
+                    raise ValueError(
+                        "hostname should be list of string: {}".format(
+                            json.dumps(host["hostname"])
+                        )
+                    )
                 if "file_base_url" not in host:
                     raise ValueError("No file_base_url: {}".format(json.dumps(host)))
 
@@ -63,17 +66,21 @@ class WEKO3(ContentProvider):
         bucket = spec["bucket"]
         file_names = spec["file_names"]
         host = spec["host"]
-        file_base_url = host["file_base_url"][:-1] if host["file_base_url"].endswith("/") else host["file_base_url"]
+        file_base_url = (
+            host["file_base_url"][:-1]
+            if host["file_base_url"].endswith("/")
+            else host["file_base_url"]
+        )
 
         yield "Fetching WEKO3 directory {} on {} at {}.\n".format(
-            ', '.join(file_names), bucket, file_base_url
+            ", ".join(file_names), bucket, file_base_url
         )
         access_token = host["token"] if "token" in host else os.getenv("WEKO3_TOKEN")
         if access_token is None:
             raise ValueError("Token is not set")
 
         for file_name in file_names:
-            file_url = file_base_url + '/' + bucket + '/' + file_name
+            file_url = file_base_url + "/" + bucket + "/" + file_name
             output_file = os.path.join(output_dir, file_name)
             yield "Fetch: {} to {}\n".format(file_url, output_file)
             req = Request(
@@ -87,7 +94,7 @@ class WEKO3(ContentProvider):
     @property
     def content_id(self):
         """Content ID of the WEOK3 directory - this provider identifies repos by random UUID"""
-        return "{}-{}-{}".format(self.bucket, '-'.join(self.file_names), self.uuid)
+        return "{}-{}-{}".format(self.bucket, "-".join(self.file_names), self.uuid)
 
     def urlopen(self, req, headers=None):
         """A urlopen() helper"""
