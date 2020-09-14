@@ -1,7 +1,7 @@
 """BuildPack for conda environments"""
 import os
 import re
-from collections import Mapping
+from collections.abc import Mapping
 
 from ruamel.yaml import YAML
 
@@ -63,7 +63,7 @@ class CondaBuildPack(BaseImage):
 
         All scripts here should be independent of contents of the repository.
 
-        This sets up through `install-miniconda.bash` (found in this directory):
+        This sets up through `install-miniforge.bash` (found in this directory):
 
         - a directory for the conda environment and its ownership by the
           notebook user
@@ -79,8 +79,8 @@ class CondaBuildPack(BaseImage):
             (
                 "root",
                 r"""
-                bash /tmp/install-miniconda.bash && \
-                rm /tmp/install-miniconda.bash /tmp/environment.yml
+                bash /tmp/install-miniforge.bash && \
+                rm /tmp/install-miniforge.bash /tmp/environment.yml
                 """,
             )
         ]
@@ -103,7 +103,7 @@ class CondaBuildPack(BaseImage):
 
         """
         files = {
-            "conda/install-miniconda.bash": "/tmp/install-miniconda.bash",
+            "conda/install-miniforge.bash": "/tmp/install-miniforge.bash",
             "conda/activate-conda.sh": "/etc/profile.d/activate-conda.sh",
         }
         py_version = self.python_version
@@ -266,8 +266,7 @@ class CondaBuildPack(BaseImage):
         return assemble_files
 
     def get_env_scripts(self):
-        """Return series of build-steps specific to this source repository.
-        """
+        """Return series of build-steps specific to this source repository."""
         scripts = []
         environment_yml = self.binder_path("environment.yml")
         env_prefix = "${KERNEL_PYTHON_PREFIX}" if self.py2 else "${NB_PYTHON_PREFIX}"
@@ -309,7 +308,8 @@ class CondaBuildPack(BaseImage):
                     r"""
                     echo auth-none=1 >> /etc/rstudio/rserver.conf && \
                     echo auth-minimum-user-id=0 >> /etc/rstudio/rserver.conf && \
-                    echo "rsession-which-r={0}/bin/R" >> /etc/rstudio/rserver.conf
+                    echo "rsession-which-r={0}/bin/R" >> /etc/rstudio/rserver.conf && \
+                    echo www-frame-origin=same >> /etc/rstudio/rserver.conf
                     """.format(
                         env_prefix
                     ),
@@ -339,6 +339,5 @@ class CondaBuildPack(BaseImage):
         return scripts
 
     def detect(self):
-        """Check if current repo should be built with the Conda BuildPack.
-        """
+        """Check if current repo should be built with the Conda BuildPack."""
         return os.path.exists(self.binder_path("environment.yml")) and super().detect()

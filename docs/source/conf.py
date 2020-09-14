@@ -34,8 +34,8 @@
 extensions = ["sphinx.ext.extlinks", "sphinxcontrib.autoprogram", "recommonmark"]
 
 extlinks = {
-    "issue": ("https://github.com/jupyter/repo2docker/issues/%s", "Issue #"),
-    "pr": ("https://github.com/jupyter/repo2docker/pull/%s", "PR #"),
+    "issue": ("https://github.com/jupyterhub/repo2docker/issues/%s", "Issue #"),
+    "pr": ("https://github.com/jupyterhub/repo2docker/pull/%s", "PR #"),
     "user": ("https://github.com/%s", "@"),
 }
 
@@ -117,7 +117,7 @@ html_favicon = "_static/images/favicon.ico"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "pandas_sphinx_theme"
+html_theme = "pydata_sphinx_theme"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the

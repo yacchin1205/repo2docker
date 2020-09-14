@@ -11,9 +11,9 @@ from .base import ContentProvider
 from osfclient.api import OSF
 from osfclient.utils import is_path_matched
 
+
 class RDM(ContentProvider):
-    """Provide contents of GakuNin RDM.
-    """
+    """Provide contents of GakuNin RDM."""
 
     def __init__(self):
         self.hosts = [
@@ -34,7 +34,11 @@ class RDM(ContentProvider):
                 if "hostname" not in host:
                     raise ValueError("No hostname: {}".format(json.dumps(host)))
                 if not isinstance(host["hostname"], list):
-                    raise ValueError("hostname should be list of string: {}".format(json.dumps(host["hostname"])))
+                    raise ValueError(
+                        "hostname should be list of string: {}".format(
+                            json.dumps(host["hostname"])
+                        )
+                    )
                 if "api" not in host:
                     raise ValueError("No api: {}".format(json.dumps(host)))
 
@@ -43,14 +47,14 @@ class RDM(ContentProvider):
         for host in self.hosts:
             if any([source.startswith(s) for s in host["hostname"]]):
                 u = urlparse(source)
-                path = u.path[1:] if u.path.startswith('/') else u.path
-                if '/' in path:
-                    self.project_id, self.path = path.split('/', 1)
-                    if self.path.startswith('files/'):
-                        self.path = self.path[len('files/'):]
+                path = u.path[1:] if u.path.startswith("/") else u.path
+                if "/" in path:
+                    self.project_id, self.path = path.split("/", 1)
+                    if self.path.startswith("files/"):
+                        self.path = self.path[len("files/") :]
                 else:
                     self.project_id = path
-                    self.path = ''
+                    self.path = ""
                 self.uuid = ref if ref is not None else str(uuid.uuid1())
                 return {
                     "project_id": self.project_id,
@@ -70,12 +74,15 @@ class RDM(ContentProvider):
         yield "Fetching RDM directory {} on {} at {}.\n".format(
             path, project_id, api_url
         )
-        osf = OSF(token=host["token"] if "token" in host else os.getenv("OSF_TOKEN"), base_url=api_url)
+        osf = OSF(
+            token=host["token"] if "token" in host else os.getenv("OSF_TOKEN"),
+            base_url=api_url,
+        )
         project = osf.project(project_id)
 
         if len(path):
-            storage = project.storage(path[:path.index("/")] if "/" in path else path)
-            subpath = path[path.index("/"):] if "/" in path else "/"
+            storage = project.storage(path[: path.index("/")] if "/" in path else path)
+            subpath = path[path.index("/") :] if "/" in path else "/"
             for line in self._fetch_storage(storage, output_dir, subpath):
                 yield line
         else:
@@ -91,13 +98,14 @@ class RDM(ContentProvider):
         else:
             path = path if path.endswith("/") else path + "/"
             path_filter = lambda f: is_path_matched(path, f)
-        files = storage.files if path_filter is None \
-            else storage.matched_files(path_filter)
+        files = (
+            storage.files if path_filter is None else storage.matched_files(path_filter)
+        )
         for file_ in files:
             if path is None:
                 local_path = storage.provider + file_.path
             else:
-                local_path = file_.path[len(path):]
+                local_path = file_.path[len(path) :]
             local_full_path = os.path.join(output_dir, local_path)
             local_dir, _ = os.path.split(local_full_path)
             if not os.path.isdir(local_dir):
