@@ -47,15 +47,14 @@ setup(
     name="jupyter-repo2docker",
     version=versioneer.get_version(),
     install_requires=[
-        "docker",
         "traitlets",
         "python-json-logger",
+        "chardet",
+        "docker!=5.0.0",
+        "entrypoints",
         "escapism",
         "jinja2",
         "ruamel.yaml>=0.15",
-        # six installation is a workaround of https://github.com/docker/docker-py/pull/2844.
-        # When removing this, also remove the "rm /tmp/wheelhouse/six*.whl" line in ./Dockerfile
-        "six",
         "toml",
         "semver",
         "osfclient @ git+https://github.com/RCOSDP/rdmclient.git",
