@@ -6,7 +6,7 @@ if [[ ! -z "${R2D_ENTRYPOINT:-}" ]]; then
     if [[ ! -x "$R2D_ENTRYPOINT" ]]; then
         chmod u+x "$R2D_ENTRYPOINT"
     fi
-    exec "$R2D_ENTRYPOINT" "$@"
+    exec "$R2D_ENTRYPOINT" /usr/local/bin/jupyter-start.sh "$@"
 else
-    exec "$@"
+    exec /usr/local/bin/jupyter-start.sh "$@"
 fi

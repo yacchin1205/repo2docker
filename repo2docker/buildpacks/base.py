@@ -114,6 +114,8 @@ ARG REPO_DIR=${HOME}
 ENV REPO_DIR ${REPO_DIR}
 WORKDIR ${REPO_DIR}
 RUN chown ${NB_USER}:${NB_USER} ${REPO_DIR}
+COPY /jupyter-start.sh /usr/local/bin/jupyter-start.sh
+RUN chmod +x /usr/local/bin/jupyter-start.sh
 
 # We want to allow two things:
 #   1. If there's a .local/bin directory in the repo, things there
@@ -196,6 +198,9 @@ CMD ["jupyter", "notebook", "--ip", "0.0.0.0"]
 ENTRYPOINT_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "repo2docker-entrypoint"
 )
+START_SH_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "jupyter-start.sh"
+)
 
 # Also used for the group
 DEFAULT_NB_UID = 1000
@@ -252,6 +257,7 @@ class BuildPack:
             "less",
             "nodejs",
             "unzip",
+            "sudo",
         }
 
     def get_build_env(self):
@@ -634,6 +640,7 @@ class BuildPack:
             tar.add(src_path, dest_path, filter=_filter_tar)
 
         tar.add(ENTRYPOINT_FILE, "repo2docker-entrypoint", filter=_filter_tar)
+        tar.add(START_SH_FILE, "jupyter-start.sh", filter=_filter_tar)
 
         tar.add(".", "src/", filter=_filter_tar)
 
