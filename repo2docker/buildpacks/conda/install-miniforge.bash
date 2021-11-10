@@ -5,12 +5,12 @@ set -ex
 
 
 cd $(dirname $0)
-MINIFORGE_VERSION=4.8.2-1
-MAMBA_VERSION=0.5.1
+MINIFORGE_VERSION=4.9.2-2
+MAMBA_VERSION=0.7.4
 # SHA256 for installers can be obtained from https://github.com/conda-forge/miniforge/releases
-SHA256SUM="4f897e503bd0edfb277524ca5b6a5b14ad818b3198c2f07a36858b7d88c928db"
+SHA256SUM="7a7bfaff87680298304a97ba69bcf92f66c810995a7155a2918b99fafb8ca1dc"
 
-URL="https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh"
+URL="https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Mambaforge-${MINIFORGE_VERSION}-Linux-x86_64.sh"
 INSTALLER_PATH=/tmp/miniforge-installer.sh
 
 # make sure we don't do anything funky with user's $HOME
@@ -42,40 +42,36 @@ echo 'update_dependencies: false' >> ${CONDA_DIR}/.condarc
 # avoid future changes to default channel_priority behavior
 conda config --system --set channel_priority "flexible"
 
-# do all installation with mamba
-time conda install -y mamba==${MAMBA_VERSION}
-# switch back to conda
-# ln -s $CONDA_DIR/bin/conda $CONDA_DIR/bin/mamba
+time mamba install -y mamba==${MAMBA_VERSION}
 
 echo "installing notebook env:"
-cat /tmp/environment.yml
-time mamba env create -p ${NB_PYTHON_PREFIX} -f /tmp/environment.yml
+cat "${NB_ENVIRONMENT_FILE}"
 
-# Install jupyter-offline-notebook to allow users to download notebooks
-# after the server connection has been lost
-# This will install and enable the extension for jupyter notebook
-time ${NB_PYTHON_PREFIX}/bin/python -m pip install jupyter-offlinenotebook==0.1.0
-# and this installs it for lab. Keep going if the lab version is incompatible
-# with the extension.
-# Don't minimize build as it may fail, possibly due to excessive resource usage
-# https://discourse.jupyter.org/t/tip-binder-jupyterlab-extension/6022
-# https://discourse.jupyter.org/t/jupyter-lab-build-hangs-and-then-fails-at-webpack-config-webpack-prod-minimize-config-js/6017/3
-time ${NB_PYTHON_PREFIX}/bin/jupyter labextension install --no-build jupyter-offlinenotebook && \
-time $NB_PYTHON_PREFIX/bin/jupyter lab build --minimize=False || \
-true
+time mamba create -p ${NB_PYTHON_PREFIX} --file "${NB_ENVIRONMENT_FILE}"
 
+if [[ ! -z "${NB_REQUIREMENTS_FILE:-}" ]]; then
+    echo "installing pip requirements"
+    cat "${NB_REQUIREMENTS_FILE}"
+    ${NB_PYTHON_PREFIX}/bin/python -mpip install --no-cache --no-deps -r "${NB_REQUIREMENTS_FILE}"
+fi
 # empty conda history file,
 # which seems to result in some effective pinning of packages in the initial env,
 # which we don't intend.
 # this file must not be *removed*, however
 echo '' > ${NB_PYTHON_PREFIX}/conda-meta/history
 
-if [[ -f /tmp/kernel-environment.yml ]]; then
+if [[ ! -z "${KERNEL_ENVIRONMENT_FILE:-}" ]]; then
     # install kernel env and register kernelspec
     echo "installing kernel env:"
-    cat /tmp/kernel-environment.yml
+    cat "${KERNEL_ENVIRONMENT_FILE}"
+    time mamba create -p ${KERNEL_PYTHON_PREFIX} --file "${KERNEL_ENVIRONMENT_FILE}"
 
-    time mamba env create -p ${KERNEL_PYTHON_PREFIX} -f /tmp/kernel-environment.yml
+    if [[ ! -z "${KERNEL_REQUIREMENTS_FILE:-}" ]]; then
+        echo "installing pip requirements for kernel"
+        cat "${KERNEL_REQUIREMENTS_FILE}"
+        ${KERNEL_PYTHON_PREFIX}/bin/python -mpip install --no-cache --no-deps -r "${KERNEL_REQUIREMENTS_FILE}"
+    fi
+
     ${KERNEL_PYTHON_PREFIX}/bin/ipython kernel install --prefix "${NB_PYTHON_PREFIX}"
     echo '' > ${KERNEL_PYTHON_PREFIX}/conda-meta/history
     mamba list -p ${KERNEL_PYTHON_PREFIX}

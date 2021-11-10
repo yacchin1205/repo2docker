@@ -61,10 +61,11 @@ This outlines the process for getting changes to the repo2docker project merged.
 3. Make edits in [your fork](https://help.github.com/en/articles/fork-a-repo) of the [repo2docker repository](https://github.com/jupyterhub/repo2docker).
 4. Make a [pull request](https://help.github.com/en/articles/about-pull-requests).
 Read the [next section](#guidelines-to-getting-a-pull-request-merged) for guidelines for both reviewers and contributors on merging a PR.
-5. Edit [the changelog](./../../changelog) by appending your feature / bug fix to the development version.
 6. Wait for a community member to merge your changes.
   Remember that **someone else must merge your pull request**.
   That goes for new contributors and long term maintainers alike.
+  Because `main` is continuously deployed to mybinder.org it is essential
+  that `main` is always in a deployable state.
 7. (optional) Deploy a new version of repo2docker to mybinder.org by [following these steps](http://mybinder-sre.readthedocs.io/en/latest/deployment/how.html)
 
 ## Guidelines to getting a Pull Request merged
@@ -84,13 +85,13 @@ These are not hard rules to be enforced by 🚓 but they are suggestions written
   This makes it easier to find all changes since the last deployment `git log --merges --pretty=format:"%h %<(10,trunc)%an %<(15)%ar %s" <deployed-revision>..` and your PR easier to review.
 * **Make it clear when your PR is ready for review.**
   Prefix the title of your pull request (PR) with `[MRG]` if the contribution is complete and should be subjected to a detailed review.
-* **Enter your changes into the [changelog](./../../changelog)** in `docs/source/changelog.rst`.
 * **Use commit messages to describe _why_ you are proposing the changes you are proposing.**
 * **Try to not rush changes** (the definition of rush depends on how big your changes are).
   Remember that everyone in the repo2docker team is a volunteer and we can not (nor would we want to) control their time or interests.
   Wait patiently for a reviewer to merge the PR.
   (Remember that **someone else** must merge your PR, even if you have the admin rights to do so.)
 
+(contributing:local-dev)=
 ## Setting up for Local Development
 
 To develop & test repo2docker locally, you need:
@@ -120,10 +121,6 @@ After cloning the repository, you should set up an
 isolated environment to install libraries required for running / developing
 repo2docker.
 
-There are many ways to do this but here we present you with two approaches: `virtual environment` or `pipenv`.
-
-- Using `virtual environment`
-
 ```bash
 python3 -m venv .
 source bin/activate
@@ -134,18 +131,6 @@ pip3 install black
 ```
 
 This should install all the libraries required for testing & running repo2docker!
-
-- Using `pipenv`
-
-Note that you will need to install pipenv first using `pip3 install pipenv`.
-Then from the root directory of this project you can use the following commands:
-
-```bash
-pipenv install --dev
-```
-
-This should install both the dev and docs requirements at once!
-
 
 ### Code formatting
 
