@@ -163,6 +163,10 @@ LABEL {{k}}="{{v}}"
 # We always want containers to run as non-root
 USER ${NB_USER}
 
+{% if custom_extension_script is not none -%}
+RUN bash -c "{{ custom_extension_script }}"
+{% endif -%}
+
 {% if post_build_scripts -%}
 # Make sure that postBuild scripts are marked executable before executing them
 {% for s in post_build_scripts -%}
@@ -512,6 +516,7 @@ class BuildPack:
             build_script_files=build_script_files,
             base_packages=sorted(self.get_base_packages()),
             post_build_scripts=self.get_post_build_scripts(),
+            custom_extension_script=self.get_custom_extension_script(),
             start_script=self.get_start_script(),
             appendix=self.appendix,
             # For docker 17.09 `COPY --chown`, 19.03 would allow using $NBUSER
@@ -715,3 +720,14 @@ class BaseImage(BuildPack):
             # the only path evaluated at container start time rather than build time
             return os.path.join("${REPO_DIR}", start)
         return None
+
+    def get_custom_extension_script(self):
+        bash_scripts = '''pip3 install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm_binderhub_jlabextension-refs.tags.0.1.1test2.tar.gz
+jupyter labextension install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm-binderhub-jlabextension-refs.tags.0.1.1test2.tgz
+jupyter labextension enable rdm-binderhub-jlabextension
+jupyter server extension enable rdm_binderhub_jlabextension
+jupyter nbextension install --py rdm_binderhub_jlabextension --user
+jupyter nbextension enable --py rdm_binderhub_jlabextension --user
+if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
+'''
+        return ' && '.join([line.strip() for line in bash_scripts.split('\n') if len(line.strip()) > 0])
