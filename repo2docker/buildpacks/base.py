@@ -722,8 +722,10 @@ class BaseImage(BuildPack):
         return None
 
     def get_custom_extension_script(self):
-        bash_scripts = """pip3 install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm_binderhub_jlabextension-refs.tags.0.1.1test2.tar.gz
-jupyter labextension install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm-binderhub-jlabextension-refs.tags.0.1.1test2.tgz
+        grdm_jlab_release_url = "https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.2test3"
+        grdm_jlab_release_tag = "0.1.2test3"
+        bash_scripts = f"""pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
+jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
 jupyter nbextension install --py rdm_binderhub_jlabextension --user
