@@ -22,7 +22,7 @@ RUN pip3 install hg-evolve --user --no-cache-dir
 
 # install repo2docker
 COPY --from=0 /tmp/wheelhouse /tmp/wheelhouse
-RUN pip3 install --no-cache-dir /tmp/wheelhouse/*.whl \
+RUN pip3 install --no-cache-dir /tmp/wheelhouse/*.whl --ignore-installed \
  && pip3 list
 
 # add git-credential helper
