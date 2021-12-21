@@ -722,12 +722,14 @@ class BaseImage(BuildPack):
         return None
 
     def get_custom_extension_script(self):
-        bash_scripts = '''pip3 install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm_binderhub_jlabextension-refs.tags.0.1.1test2.tar.gz
+        bash_scripts = """pip3 install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm_binderhub_jlabextension-refs.tags.0.1.1test2.tar.gz
 jupyter labextension install https://github.com/yacchin1205/CS-jupyterlab-grdm/releases/download/0.1.1test2/rdm-binderhub-jlabextension-refs.tags.0.1.1test2.tgz
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
 jupyter nbextension install --py rdm_binderhub_jlabextension --user
 jupyter nbextension enable --py rdm_binderhub_jlabextension --user
 if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
-'''
-        return ' && '.join([line.strip() for line in bash_scripts.split('\n') if len(line.strip()) > 0])
+"""
+        return " && ".join(
+            [line.strip() for line in bash_scripts.split("\n") if len(line.strip()) > 0]
+        )
