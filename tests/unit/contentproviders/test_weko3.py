@@ -13,36 +13,19 @@ def test_detect_weko3_url():
     spec = weko3.detect("https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt")
 
     assert spec is not None, spec
-    assert spec["bucket"] == "abcdefgh-12345678"
-    assert spec["file_names"] == ["test1.txt"]
+    assert spec["url"] == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
     assert re.match(r"^[0-9A-Fa-f\-]+$", spec["uuid"]) is not None
-    assert (
-        spec["host"]["file_base_url"] == "https://test.some.host.nii.ac.jp/api/files/"
-    )
-
-    weko3 = WEKO3()
-    spec = weko3.detect(
-        "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt,test2.txt",
-        "X1234",
-    )
-
-    assert spec is not None, spec
-    assert spec["bucket"] == "abcdefgh-12345678"
-    assert spec["file_names"] == ["test1.txt", "test2.txt"]
-    assert spec["uuid"] == "X1234"
-    assert (
-        spec["host"]["file_base_url"] == "https://test.some.host.nii.ac.jp/api/files/"
-    )
+    assert spec["host"]["hostname"] == ["https://test.some.host.nii.ac.jp/"]
 
 
-def test_not_detect_rdm_url():
+def test_not_detect_weko3_url():
     weko3 = WEKO3()
     spec = weko3.detect("https://unknown.some.host.nii.ac.jp/x1234")
 
     assert spec is None, spec
 
 
-def test_detect_external_rdm_url():
+def test_detect_external_weko3_url():
     with NamedTemporaryFile("w+") as f:
         try:
             f.write(
@@ -64,25 +47,8 @@ def test_detect_external_rdm_url():
             spec = weko3.detect("https://test1.some.host.nii.ac.jp/x1234/t.txt")
 
             assert spec is not None, spec
-            assert spec["bucket"] == "x1234"
-            assert spec["file_names"] == ["t.txt"]
-            assert (
-                spec["host"]["file_base_url"]
-                == "https://test1.some.host.nii.ac.jp/api/files/"
-            )
-
-            weko3 = WEKO3()
-            spec = weko3.detect(
-                "https://test1.some.host.nii.ac.jp/x1234/t1.txt,t2.txt", ""
-            )
-
-            assert spec is not None, spec
-            assert spec["bucket"] == "x1234"
-            assert spec["file_names"] == ["t1.txt", "t2.txt"]
-            assert (
-                spec["host"]["file_base_url"]
-                == "https://test1.some.host.nii.ac.jp/api/files/"
-            )
+            assert spec["url"] == "https://test1.some.host.nii.ac.jp/x1234/t.txt"
+            assert spec["host"]["hostname"] == ["https://test1.some.host.nii.ac.jp/"]
         finally:
             del os.environ["WEKO3_HOSTS"]
 
@@ -105,8 +71,7 @@ def test_fetch_content():
     with TemporaryDirectory() as d:
         weko3 = WEKO3()
         spec = {
-            "bucket": "x1234",
-            "file_names": ["t1.txt", "t2.txt"],
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
             "host": {
                 "file_base_url": "https://test.some.host/api/files/",
                 "token": "TEST",
@@ -115,30 +80,322 @@ def test_fetch_content():
         with patch.object(WEKO3, "urlopen") as fake_urlopen:
             fake_read = MagicMock()
             fake_read.return_value = b"1234567890"
-            fake_urlopen.return_value = MagicMock(read=fake_read)
+            fake_urlopen.return_value = MagicMock(read=fake_read, status=200)
             for msg in weko3.fetch(spec, d):
                 if msg.startswith("Fetching"):
-                    assert "x1234 at https://test.some.host/api/files" in msg
-                elif msg.startswith("Fetch:") and "/t1.txt" in msg:
-                    assert "to {}/t1.txt".format(d) in msg
-                elif msg.startswith("Fetch:") and "/t2.txt" in msg:
-                    assert "to {}/t2.txt".format(d) in msg
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
                 else:
                     assert False, msg
-            assert fake_urlopen.call_count == 2
+            assert fake_urlopen.call_count == 1
             assert (
                 fake_urlopen.call_args_list[0][0][0].full_url
-                == "https://test.some.host/api/files/x1234/t1.txt"
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
             )
+            assert list(os.listdir(d)) == ["test1.txt"]
+
+
+def test_fetch_named_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="example.txt"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
             assert (
-                fake_urlopen.call_args_list[0][0][0].get_header("Authorization")
-                == "Bearer TEST"
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["example.txt"]
+
+
+def test_fetch_invalid_named_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="../../example.txt"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["..-..-example.txt"]
+
+
+def test_fetch_unnamed_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+            fake_urlopen.return_value = MagicMock(read=fake_read, status=200)
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/" in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/"
+            )
+            assert list(os.listdir(d)) == ["unnamed_1"]
+
+
+def test_forbidden_fetch_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+            fake_urlopen.return_value = MagicMock(read=fake_read, status=403)
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+
+
+def test_fetch_ld_json_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"""
+<html>
+<head>
+  <title>Sample Database</title>
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org/",
+    "@type":"Dataset",
+    "distribution":[
+       {
+          "@type":"DataDownload",
+          "encodingFormat":"CSV",
+          "contentUrl":"https://test.some.host.nii.ac.jp/abcdefgh-12345678/test2.csv"
+       },
+       {
+          "@type":"DataDownload",
+          "encodingFormat":"XML",
+          "contentUrl":"https://test.some.host.nii.ac.jp/abcdefgh-12345678/test3.xml"
+       }
+    ]
+  }
+  </script>
+</head>
+<body>
+</body>
+</html>
+"""
+
+            def fake_getheader(name):
+                if name == "Content-Type":
+                    return "text/html"
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for i, msg in enumerate(weko3.fetch(spec, d)):
+                if i == 0 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html"
+                        in msg
+                    )
+                elif i == 1 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test2.csv"
+                        in msg
+                    )
+                elif i == 2 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test3.xml"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 3
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html"
             )
             assert (
                 fake_urlopen.call_args_list[1][0][0].full_url
-                == "https://test.some.host/api/files/x1234/t2.txt"
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test2.csv"
             )
             assert (
-                fake_urlopen.call_args_list[1][0][0].get_header("Authorization")
-                == "Bearer TEST"
+                fake_urlopen.call_args_list[2][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test3.xml"
             )
+            assert sorted(list(os.listdir(d))) == [
+                "test1.html",
+                "test2.csv",
+                "test3.xml",
+            ]
+
+
+def test_fetch_unnamed_ld_json_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"""
+<html>
+<head>
+  <title>Sample Database</title>
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org/",
+    "@type":"Dataset",
+    "distribution":[
+       {
+          "@type":"DataDownload",
+          "encodingFormat":"CSV",
+          "contentUrl":"https://test.some.host.nii.ac.jp/abcdefgh-12345678/"
+       },
+       {
+          "@type":"DataDownload",
+          "encodingFormat":"XML",
+          "contentUrl":"https://test.some.host.nii.ac.jp/abcdefgh-12345678/"
+       }
+    ]
+  }
+  </script>
+</head>
+<body>
+</body>
+</html>
+"""
+
+            def fake_getheader(name):
+                if name == "Content-Type":
+                    return "text/html"
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for i, msg in enumerate(weko3.fetch(spec, d)):
+                if i == 0 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html"
+                        in msg
+                    )
+                elif i == 1 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/" in msg
+                    )
+                elif i == 2 and msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/" in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 3
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.html"
+            )
+            assert (
+                fake_urlopen.call_args_list[1][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/"
+            )
+            assert (
+                fake_urlopen.call_args_list[2][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/"
+            )
+            assert sorted(list(os.listdir(d))) == [
+                "test1.html",
+                "unnamed_1",
+                "unnamed_2",
+            ]
