@@ -2,7 +2,7 @@
 """
 Freeze the conda environment.yml
 
-It runs the freeze in a continuumio/miniconda3 image to ensure portability
+Using conda-lock
 
 Usage:
 
@@ -19,29 +19,22 @@ import sys
 from ruamel.yaml import YAML
 
 
-# Docker image version can be different than conda version,
-# since miniconda3 docker images seem to lag conda releases.
-MINICONDA_DOCKER_VERSION = "4.7.12"
-CONDA_VERSION = "4.7.12"
-
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 
 ENV_FILE = HERE / "environment.yml"
-FROZEN_FILE = os.path.splitext(ENV_FILE)[0] + ".frozen.yml"
+FROZEN_FILE = os.path.splitext(ENV_FILE)[0] + ".lock"
 
 ENV_FILE_T = HERE / "environment.py-{py}.yml"
-FROZEN_FILE_T = os.path.splitext(ENV_FILE_T)[0] + ".frozen.yml"
 
 yaml = YAML(typ="rt")
 
 
-def freeze(env_file, frozen_file):
-    """Freeze a conda environment.yml
+def freeze(env_file, frozen_file, platform="linux-64"):
+    """Freeze a conda environment
 
-    By running in docker:
+    By running:
 
-        conda env create
-        conda env export
+        conda-lock --mamba --platform=linux-64 -f environment.yml
 
     Result will be stored in frozen_file
     """
@@ -57,37 +50,32 @@ def freeze(env_file, frozen_file):
                 return
     print(f"Freezing {env_file} -> {frozen_file}")
 
+    # FIXME: conda-lock 0.8 requires {platform} in template
+    # https://github.com/conda-incubator/conda-lock/pull/78
+    frozen_template = str(frozen_dest) + ".{platform}"
+    frozen_tempfile = pathlib.Path(frozen_template.format(platform=platform))
+
+    check_call(
+        [
+            "conda-lock",
+            # FIXME: adopt micromamba after ordering is fixed
+            # https://github.com/conda-incubator/conda-lock/issues/79
+            "--mamba",
+            f"--platform={platform}",
+            f"--filename-template={frozen_template}",
+            f"--file={env_file}",
+        ]
+    )
+
     with frozen_dest.open("w") as f:
         f.write(
             f"# AUTO GENERATED FROM {env_file.relative_to(HERE)}, DO NOT MANUALLY MODIFY\n"
         )
         f.write(f"# Frozen on {datetime.utcnow():%Y-%m-%d %H:%M:%S UTC}\n")
+        with frozen_tempfile.open() as temp:
+            f.write(temp.read())
 
-    check_call(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-v" f"{HERE}:/r2d",
-            "-it",
-            f"continuumio/miniconda3:{MINICONDA_DOCKER_VERSION}",
-            "sh",
-            "-c",
-            "; ".join(
-                [
-                    "set -ex",
-                    f"conda install -yq -S conda={CONDA_VERSION}",
-                    "conda config --add channels conda-forge",
-                    "conda config --system --set auto_update_conda false",
-                    f"conda env create -v -f /r2d/{env_file.relative_to(HERE)} -n r2d",
-                    # add conda-forge broken channel as lowest priority in case
-                    # any of our frozen packages are marked as broken after freezing
-                    "conda config --append channels conda-forge/label/broken",
-                    f"conda env export -n r2d >> /r2d/{frozen_file.relative_to(HERE)}",
-                ]
-            ),
-        ]
-    )
+    os.remove(frozen_tempfile)
 
 
 def set_python(py_env_file, py):
@@ -119,12 +107,12 @@ def set_python(py_env_file, py):
 
 if __name__ == "__main__":
     # allow specifying which Pythons to update on argv
-    pys = sys.argv[1:] or ("2.7", "3.6", "3.7", "3.8")
+    pys = sys.argv[1:] or ("2.7", "3.6", "3.7", "3.8", "3.9")
     default_py = "3.7"
     for py in pys:
         env_file = pathlib.Path(str(ENV_FILE_T).format(py=py))
         set_python(env_file, py)
-        frozen_file = pathlib.Path(os.path.splitext(env_file)[0] + ".frozen.yml")
+        frozen_file = pathlib.Path(os.path.splitext(env_file)[0] + ".lock")
         freeze(env_file, frozen_file)
         if py == default_py:
             shutil.copy(frozen_file, FROZEN_FILE)

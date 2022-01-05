@@ -47,15 +47,19 @@ setup(
     name="jupyter-repo2docker",
     version=versioneer.get_version(),
     install_requires=[
-        "docker",
-        "traitlets",
-        "python-json-logger",
+        "chardet",
+        "docker!=5.0.0",
+        "entrypoints",
         "escapism",
+        "iso8601",
         "jinja2",
+        "python-json-logger",
+        "requests",
         "ruamel.yaml>=0.15",
-        "toml",
         "semver",
         "osfclient @ git+https://github.com/RCOSDP/rdmclient.git",
+        "toml",
+        "traitlets",
     ],
     python_requires=">=3.6",
     author="Project Jupyter Contributors",
@@ -89,6 +93,7 @@ setup(
         "console_scripts": [
             "jupyter-repo2docker = repo2docker.__main__:main",
             "repo2docker = repo2docker.__main__:main",
-        ]
+        ],
+        "repo2docker.engines": ["docker = repo2docker.docker:DockerEngine"],
     },
 )
