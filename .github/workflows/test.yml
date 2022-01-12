@@ -122,4 +122,4 @@ jobs:
         run: |
           pip install codecov
           pushd tests && codecov && cat
-          cat /home/runner/work/repo2docker/repo2docker/tests/coverage.xml
+          cat /home/runner/work/CS-repo2docker/CS-repo2docker/tests/coverage.xml
