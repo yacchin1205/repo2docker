@@ -390,6 +390,34 @@ class CondaBuildPack(BaseImage):
             scripts.extend(self.get_env_scripts())
         return scripts
 
+    def get_custom_extension_script(self):
+        grdm_jlab_release_url = (
+            "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.1.0"
+        )
+        grdm_jlab_release_tag = "0.1.0"
+        jlab_ext_scripts = f"""
+pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
+jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
+jupyter labextension enable rdm-binderhub-jlabextension
+jupyter server extension enable rdm_binderhub_jlabextension
+jupyter nbextension install --py rdm_binderhub_jlabextension --user
+jupyter nbextension enable --py rdm_binderhub_jlabextension --user
+"""
+        jlab_ext_script = " && ".join(
+            [
+                line.strip()
+                for line in jlab_ext_scripts.split("\n")
+                if len(line.strip()) > 0
+            ]
+        )
+        bash_scripts = f"""
+if [ -x \\"$(command -v pip3)\\" ] && jupyter lab --version && [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -gt 2 ]; then {jlab_ext_script}; fi
+if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
+"""
+        return " && ".join(
+            [line.strip() for line in bash_scripts.split("\n") if len(line.strip()) > 0]
+        )
+
     def detect(self):
         """Check if current repo should be built with the Conda BuildPack."""
         return os.path.exists(self.binder_path("environment.yml")) and super().detect()

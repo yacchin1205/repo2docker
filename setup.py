@@ -60,6 +60,7 @@ setup(
         "osfclient @ git+https://github.com/RCOSDP/rdmclient.git",
         "toml",
         "traitlets",
+        "beautifulsoup4>=4.10.0",
     ],
     python_requires=">=3.6",
     author="Project Jupyter Contributors",
