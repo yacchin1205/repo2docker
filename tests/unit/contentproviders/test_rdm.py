@@ -46,6 +46,15 @@ def test_detect_rdm_url():
     assert spec["uuid"] == "X1234"
     assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
 
+    rdm = RDM()
+    spec = rdm.detect("https://test.some.host.nii.ac.jp/x1234/files/test", "HEAD")
+
+    assert spec is not None, spec
+    assert spec["project_id"] == "x1234"
+    assert spec["path"] == "test"
+    assert re.match(r"^[0-9A-Fa-f\-]+$", spec["uuid"]) is not None
+    assert spec["host"]["api"] == "https://api.test.some.host.nii.ac.jp/v2/"
+
 
 def test_not_detect_rdm_url():
     rdm = RDM()

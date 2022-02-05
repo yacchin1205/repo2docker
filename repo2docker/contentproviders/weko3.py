@@ -49,7 +49,7 @@ class WEKO3(ContentProvider):
         for host in self.hosts:
             if any([source.startswith(s) for s in host["hostname"]]):
                 self.url = source
-                self.uuid = ref if ref is not None else str(uuid.uuid1())
+                self.uuid = ref if self._check_ref_defined(ref) else str(uuid.uuid1())
                 return {
                     "url": self.url,
                     "host": host,
@@ -64,6 +64,11 @@ class WEKO3(ContentProvider):
 
         for msg in self._fetch_url(url, output_dir):
             yield msg
+
+    def _check_ref_defined(self, ref):
+        if ref is None or ref == "HEAD":
+            return False
+        return True
 
     def _log_403_error(self, url):
         self.log.error(f"403 Error: {url}")

@@ -17,6 +17,26 @@ def test_detect_weko3_url():
     assert re.match(r"^[0-9A-Fa-f\-]+$", spec["uuid"]) is not None
     assert spec["host"]["hostname"] == ["https://test.some.host.nii.ac.jp/"]
 
+    weko3 = WEKO3()
+    spec = weko3.detect(
+        "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt", ref="MYVERSION"
+    )
+
+    assert spec is not None, spec
+    assert spec["url"] == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+    assert spec["uuid"] == "MYVERSION"
+    assert spec["host"]["hostname"] == ["https://test.some.host.nii.ac.jp/"]
+
+    weko3 = WEKO3()
+    spec = weko3.detect(
+        "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt", ref="HEAD"
+    )
+
+    assert spec is not None, spec
+    assert spec["url"] == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+    assert re.match(r"^[0-9A-Fa-f\-]+$", spec["uuid"]) is not None
+    assert spec["host"]["hostname"] == ["https://test.some.host.nii.ac.jp/"]
+
 
 def test_not_detect_weko3_url():
     weko3 = WEKO3()
