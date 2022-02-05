@@ -7,7 +7,7 @@ import uuid
 
 from urllib import request
 from urllib.request import Request
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 from .. import __version__
 from .base import ContentProvider
@@ -90,17 +90,10 @@ class WEKO3(ContentProvider):
         _, default_filename = os.path.split(u.path)
         if cd is None:
             return self._normalize_url_filename(default_filename)
-        disp = [part.strip() for part in cd.split(";")]
-        for part in disp:
-            if not part.startswith("filename="):
-                continue
-            part = part[9:].strip()
-            if part.startswith('"') and part.endswith('"'):
-                return self._normalize_content_disposition_filename(part[1:-1])
-            if part.startswith("'") and part.endswith("'"):
-                return self._normalize_content_disposition_filename(part[1:-1])
-            return self._normalize_content_disposition_filename(part)
-        self.log.warning(f"Unknown Content-Disposition header: {cd}")
+        filename = self._parse_content_disposition_header(cd)
+        if filename is not None:
+            return self._normalize_content_disposition_filename(filename)
+        self.log.warning(f"Unexpected Content-Disposition header: {cd}")
         u = urlparse(url)
         _, filename = os.path.split(u.path)
         return self._normalize_url_filename(filename)
@@ -155,3 +148,49 @@ class WEKO3(ContentProvider):
                 req.add_header(key, value)
 
         return request.urlopen(req)
+
+    def _parse_content_disposition_header(self, cd):
+        disp = [part.strip() for part in cd.split(";")]
+        has_filename = False
+        filename_pattern = re.compile(r"^(filename\*?)=(.+)$")
+        ext_value_pattern = re.compile(r"([a-zA-Z0-9-_]+)\'([a-zA-Z0-9-_]*)\'(.+)")
+        encoded_filename = None
+        raw_filename = None
+        supported_encodings = {"UTF-8": "utf8", "ISO-8859-1": "latin-1"}
+        for part in disp:
+            if part == "attachment" or part == "inline":
+                has_filename = True
+                continue
+            m = filename_pattern.match(part)
+            if not m:
+                continue
+            value = m.group(2)
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            elif value.startswith("'") and value.endswith("'"):
+                value = value[1:-1]
+            if not m.group(1).endswith("*"):
+                raw_filename = value
+                continue
+            if encoded_filename is not None:
+                continue
+            ext_value_m = ext_value_pattern.match(value)
+            encoding = ext_value_m.group(1).upper()
+            if encoding not in supported_encodings:
+                self.log.warning(f"Unsupported encoding: {value}")
+                continue
+            try:
+                encoded_filename = unquote(
+                    ext_value_m.group(3),
+                    encoding=supported_encodings[encoding],
+                    errors="strict",
+                )
+            except UnicodeError as e:
+                self.log.warning(f"UnicodeDecodeError: {value}, {e}")
+                continue
+        if not has_filename:
+            self.log.warning(f"Content-Disposition header is not attachment: {cd}")
+            return None
+        if encoded_filename is not None:
+            return encoded_filename
+        return raw_filename

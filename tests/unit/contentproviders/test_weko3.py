@@ -97,6 +97,36 @@ def test_fetch_content():
             assert list(os.listdir(d)) == ["test1.txt"]
 
 
+def test_fetch_url_encoded_content():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/%E5%9B%B32.eps",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+            fake_urlopen.return_value = MagicMock(read=fake_read, status=200)
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/%E5%9B%B32.eps"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/%E5%9B%B32.eps"
+            )
+            assert list(os.listdir(d)) == ["%E5%9B%B32.eps"]
+
+
 def test_fetch_named_content():
     with TemporaryDirectory() as d:
         weko3 = WEKO3()
@@ -133,6 +163,348 @@ def test_fetch_named_content():
                 == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
             )
             assert list(os.listdir(d)) == ["example.txt"]
+
+
+def test_fetch_named_content_with_utf():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return "attachment; filename=\"_2.eps\"; filename*=UTF-8''%E5%9B%B32.eps"
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["図2.eps"]
+
+
+def test_fetch_named_content_with_utf_double_quoted():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="UTF-8\'\'%E5%9B%B32.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["図2.eps"]
+
+
+def test_fetch_named_content_with_utf_single_quoted():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return "attachment; filename=\"_2.eps\"; filename*='UTF-8''%E5%9B%B32.eps'"
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["図2.eps"]
+
+
+def test_fetch_named_content_with_utf_lower():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="utf-8\'\'%E5%9B%B32.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["図2.eps"]
+
+
+def test_fetch_named_content_with_utf_with_language():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="UTF-8\'ja\'%E5%9B%B32.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["図2.eps"]
+
+
+def test_fetch_named_content_with_latin1():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="ISO-8859-1\'\'F2.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["F2.eps"]
+
+
+def test_fetch_named_content_with_latin1_with_dots():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="ISO-8859-1\'\'..%2F..%2Fe.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["..-..-e.eps"]
+
+
+def test_fetch_named_content_with_invalid_utf8():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="UTF-8\'\'%F7.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["_2.eps"]
+
+
+def test_fetch_named_content_with_invalid_encoding():
+    with TemporaryDirectory() as d:
+        weko3 = WEKO3()
+        spec = {
+            "url": "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt",
+            "host": {
+                "file_base_url": "https://test.some.host/api/files/",
+                "token": "TEST",
+            },
+        }
+        with patch.object(WEKO3, "urlopen") as fake_urlopen:
+            fake_read = MagicMock()
+            fake_read.return_value = b"1234567890"
+
+            def fake_getheader(name):
+                if name == "Content-Disposition":
+                    return 'attachment; filename="_2.eps"; filename*="UTF8\'\'%E5%9B%B32.eps"'
+                return None
+
+            fake_urlopen.return_value = MagicMock(
+                read=fake_read, status=200, getheader=fake_getheader
+            )
+            for msg in weko3.fetch(spec, d):
+                if msg.startswith("Fetching"):
+                    assert (
+                        "at https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+                        in msg
+                    )
+                else:
+                    assert False, msg
+            assert fake_urlopen.call_count == 1
+            assert (
+                fake_urlopen.call_args_list[0][0][0].full_url
+                == "https://test.some.host.nii.ac.jp/abcdefgh-12345678/test1.txt"
+            )
+            assert list(os.listdir(d)) == ["_2.eps"]
 
 
 def test_fetch_invalid_named_content():
