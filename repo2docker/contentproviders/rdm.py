@@ -55,7 +55,7 @@ class RDM(ContentProvider):
                 else:
                     self.project_id = path
                     self.path = ""
-                self.uuid = ref if ref is not None else str(uuid.uuid1())
+                self.uuid = ref if self._check_ref_defined(ref) else str(uuid.uuid1())
                 return {
                     "project_id": self.project_id,
                     "path": self.path,
@@ -63,6 +63,11 @@ class RDM(ContentProvider):
                     "uuid": self.uuid,
                 }
         return None
+
+    def _check_ref_defined(self, ref):
+        if ref is None or ref == "HEAD":
+            return False
+        return True
 
     def fetch(self, spec, output_dir, yield_output=False):
         """Fetch RDM directory"""
