@@ -103,10 +103,6 @@ COPY --chown={{ user }}:{{ user }} {{ src }} {{ dst }}
 # ensure root user after build scripts
 USER root
 
-{% if custom_extension_script is not none -%}
-RUN bash -c "{{ custom_extension_script }}"
-{% endif -%}
-
 # Allow target path repo is cloned to be configurable
 ARG REPO_DIR=${HOME}
 ENV REPO_DIR ${REPO_DIR}
@@ -165,6 +161,10 @@ LABEL {{k}}="{{v}}"
 
 # We always want containers to run as non-root
 USER ${NB_USER}
+
+{% if custom_extension_script is not none -%}
+RUN bash -c "{{ custom_extension_script }}"
+{% endif -%}
 
 {% if post_build_scripts -%}
 # Make sure that postBuild scripts are marked executable before executing them
