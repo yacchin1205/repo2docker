@@ -101,6 +101,12 @@ COPY --chown={{ user }}:{{ user }} {{ src }} {{ dst }}
 {{ sd }}
 {% endfor %}
 # ensure root user after build scripts
+USER ${NB_USER}
+
+{% if pre_custom_extension_script is not none -%}
+RUN bash -c "{{ pre_custom_extension_script }}"
+{% endif -%}
+
 USER root
 
 # Allow target path repo is cloned to be configurable
@@ -162,8 +168,8 @@ LABEL {{k}}="{{v}}"
 # We always want containers to run as non-root
 USER ${NB_USER}
 
-{% if custom_extension_script is not none -%}
-RUN bash -c "{{ custom_extension_script }}"
+{% if post_custom_extension_script is not none -%}
+RUN bash -c "{{ post_custom_extension_script }}"
 {% endif -%}
 
 {% if post_build_scripts -%}
@@ -424,7 +430,7 @@ class BuildPack:
         """
         return None
 
-    def get_custom_extension_script(self):
+    def get_custom_extension_script(self, post):
         """
         The script that should be run after the image is created.
 
@@ -522,7 +528,8 @@ class BuildPack:
             build_script_files=build_script_files,
             base_packages=sorted(self.get_base_packages()),
             post_build_scripts=self.get_post_build_scripts(),
-            custom_extension_script=self.get_custom_extension_script(),
+            pre_custom_extension_script=self.get_custom_extension_script(False),
+            post_custom_extension_script=self.get_custom_extension_script(True),
             start_script=self.get_start_script(),
             appendix=self.appendix,
             # For docker 17.09 `COPY --chown`, 19.03 would allow using $NBUSER
