@@ -422,6 +422,7 @@ jupyter nbextension install --py rdm_binderhub_jlabextension --user
 jupyter nbextension enable --py rdm_binderhub_jlabextension --user
 jlpm cache clean
 npm cache clean --force
+pip3 cache purge
 """
         jlab_ext_script = " && ".join(
             [
