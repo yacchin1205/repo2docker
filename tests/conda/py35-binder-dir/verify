@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+import sys
+from subprocess import check_output
+
+assert sys.version_info[:2] == (3, 5), sys.version
+
+out = check_output(["micromamba", "--version"]).decode("utf8").strip()
+assert out == "0.25.0", out
+
+out = check_output(["mamba", "--version"]).decode("utf8").strip()
+assert (
+    out
+    == """mamba 0.25.0
+conda 4.13.0"""
+), out
+
+import numpy

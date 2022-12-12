@@ -154,7 +154,7 @@ class CondaBuildPack(BaseImage):
             "conda/activate-conda.sh": "/etc/profile.d/activate-conda.sh",
         }
         py_version = self.python_version
-        self.log.info("Building conda environment for python=%s" % py_version)
+        self.log.info(f"Building conda environment for python={py_version}\n")
         # Select the frozen base environment based on Python version.
         # avoids expensive and possibly conflicting upgrades when changing
         # major Python versions during upgrade.
@@ -163,7 +163,7 @@ class CondaBuildPack(BaseImage):
         frozen_name = "environment.lock"
         pip_frozen_name = "requirements.txt"
         if py_version:
-            if self.py2:
+            if self.python_version == "2.7":
                 # python 2 goes in a different env
                 files[
                     "conda/environment.py-2.7.lock"
@@ -180,8 +180,8 @@ class CondaBuildPack(BaseImage):
                 if os.path.exists(os.path.join(HERE, py_frozen_name)):
                     frozen_name = py_frozen_name
                     pip_frozen_name = f"requirements.py-{py_version}.pip"
-                if not frozen_name:
-                    self.log.warning(f"No frozen env for {py_version}")
+                else:
+                    raise ValueError(f"Python version {py_version} is not supported!")
         files[
             "conda/" + frozen_name
         ] = self._nb_environment_file = "/tmp/env/environment.lock"
@@ -362,7 +362,7 @@ class CondaBuildPack(BaseImage):
                 (
                     "${NB_USER}",
                     r"""
-                ${{MAMBA_EXE}} install -p {0} r-base{1} r-irkernel=1.2 r-devtools -y && \
+                ${{MAMBA_EXE}} install -p {0} r-base{1} r-irkernel r-devtools -y && \
                 ${{MAMBA_EXE}} clean --all -f -y && \
                 ${{MAMBA_EXE}} list -p {0}
                 """.format(
@@ -386,7 +386,7 @@ class CondaBuildPack(BaseImage):
                 ),
                 (
                     "${NB_USER}",
-                    # Install a pinned version of IRKernel and set it up for use!
+                    # Register the jupyter kernel
                     r"""
                  R --quiet -e "IRkernel::installspec(prefix='{0}')"
                  """.format(
