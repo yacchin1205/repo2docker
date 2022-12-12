@@ -1,13 +1,28 @@
-from contextlib import contextmanager
-from functools import partial
 import os
 import re
 import subprocess
+from contextlib import contextmanager
+from enum import Enum
+from functools import partial
+from shutil import copy2, copystat
+
 import chardet
-
-from shutil import copystat, copy2
-
 from traitlets import Integer, TraitError
+
+
+class R2dState(Enum):
+    """
+    The current state of repo2docker
+    """
+
+    FETCHING = "fetching"
+    BUILDING = "building"
+    PUSHING = "pushing"
+    RUNNING = "running"
+    FAILED = "failed"
+
+    def __str__(self):
+        return self.value
 
 
 def execute_cmd(cmd, capture=False, **kwargs):
@@ -120,13 +135,10 @@ def validate_and_generate_port_mapping(port_mappings):
         try:
             p = int(port)
         except ValueError as e:
+            raise ValueError(f'Port specification "{mapping}" has an invalid port.')
+        if not 0 < p <= 65535:
             raise ValueError(
-                'Port specification "{}" has ' "an invalid port.".format(mapping)
-            )
-        if p > 65535:
-            raise ValueError(
-                'Port specification "{}" specifies '
-                "a port above 65535.".format(mapping)
+                f'Port specification "{mapping}" specifies a port outside 1-65535.'
             )
         return port
 
@@ -136,8 +148,7 @@ def validate_and_generate_port_mapping(port_mappings):
             port, protocol = parts
             if protocol not in ("tcp", "udp"):
                 raise ValueError(
-                    'Port specification "{}" has '
-                    "an invalid protocol.".format(mapping)
+                    f'Port specification "{mapping}" has an invalid protocol.'
                 )
         elif len(parts) == 1:
             port = parts[0]
@@ -152,7 +163,12 @@ def validate_and_generate_port_mapping(port_mappings):
         return ports
 
     for mapping in port_mappings:
-        parts = mapping.split(":")
+        if ":" in mapping:
+            parts = mapping.split(":")
+        else:
+            # single port '8888' specified,
+            # treat as '8888:8888'
+            parts = [mapping, mapping]
 
         *host, container_port = parts
         # just a port
@@ -289,14 +305,14 @@ class ByteSpecification(Integer):
             num = float(value[:-1])
         except ValueError:
             raise TraitError(
-                "{val} is not a valid memory specification. "
-                "Must be an int or a string with suffix K, M, G, T".format(val=value)
+                f"{value} is not a valid memory specification. "
+                "Must be an int or a string with suffix K, M, G, T"
             )
         suffix = value[-1]
         if suffix not in self.UNIT_SUFFIXES:
             raise TraitError(
-                "{val} is not a valid memory specification. "
-                "Must be an int or a string with suffix K, M, G, T".format(val=value)
+                f"{value} is not a valid memory specification. "
+                "Must be an int or a string with suffix K, M, G, T"
             )
         else:
             return int(float(num) * self.UNIT_SUFFIXES[suffix])

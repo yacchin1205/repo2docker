@@ -9,16 +9,15 @@ Usage:
 python freeze.py [3.8]
 """
 
-from argparse import ArgumentParser
-from datetime import datetime
 import os
 import pathlib
 import shutil
-from subprocess import check_call
 import sys
+from argparse import ArgumentParser
+from datetime import datetime
+from subprocess import check_call
 
 from ruamel.yaml import YAML
-
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 
@@ -62,6 +61,7 @@ def freeze(env_file, frozen_file, platform="linux-64"):
             # FIXME: adopt micromamba after ordering is fixed
             # https://github.com/conda-incubator/conda-lock/issues/79
             "--mamba",
+            "--kind=explicit",
             f"--platform={platform}",
             f"--filename-template={frozen_template}",
             f"--file={env_file}",
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         "py",
         nargs="*",
         help="Python version(s) to update and freeze",
-        default=("2.7", "3.6", "3.7", "3.8", "3.9"),
+        default=("3.7", "3.8", "3.9", "3.10"),
     )
     args = parser.parse_args()
     default_py = "3.7"

@@ -2,9 +2,10 @@
 Docker container engine for repo2docker
 """
 
-import docker
-from traitlets import Dict
 from iso8601 import parse_date
+from traitlets import Dict
+
+import docker
 
 from .engine import Container, ContainerEngine, ContainerEngineException, Image
 
@@ -105,6 +106,7 @@ class DockerEngine(ContainerEngine):
             fileobj=fileobj,
             path=path,
             labels=labels,
+            platform="linux/amd64",
             **kwargs,
         )
 

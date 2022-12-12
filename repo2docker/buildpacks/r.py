@@ -1,12 +1,12 @@
-import re
-import os
 import datetime
+import os
+import re
+
 import requests
 
-
 from ..semver import parse_version as V
-from .python import PythonBuildPack
 from ._r_base import rstudio_base_scripts
+from .python import PythonBuildPack
 
 
 class RBuildPack(PythonBuildPack):
@@ -38,11 +38,7 @@ class RBuildPack(PythonBuildPack):
 
     - are needed by a specific tool
 
-    The `r-base-core` package from Ubuntu or "Ubuntu packages for R"
-    apt repositories is used to install R itself,
-    rather than any of the methods from https://cran.r-project.org/.
-
-    The `r-base-dev` package is installed as advised in RStudio instructions.
+    R is installed from https://docs.rstudio.com/resources/install-r/
     """
 
     @property
@@ -67,34 +63,39 @@ class RBuildPack(PythonBuildPack):
         Will return the version specified by the user or the current default
         version.
         """
+        # Available versions at https://cran.r-project.org/src/base/
         version_map = {
-            "3.4": "3.4",
-            "3.5": "3.5.3-1bionic",
-            "3.5.0": "3.5.0-1bionic",
-            "3.5.1": "3.5.1-2bionic",
-            "3.5.2": "3.5.2-1bionic",
-            "3.5.3": "3.5.3-1bionic",
-            "3.6": "3.6.3-1bionic",
-            "3.6.0": "3.6.0-2bionic",
-            "3.6.1": "3.6.1-3bionic",
-            "4.0": "4.0.5-1.1804.0",
-            "4.0.2": "4.0.2-1.1804.0",
-            "4.1": "4.1.2-1.1804.0",
+            "4.2": "4.2.1",
+            "4.1": "4.1.3",
+            "4.0": "4.0.5",
+            "3.6": "3.6.3",
+            "3.5": "3.5.3",
+            "3.4": "3.4.4",
+            "3.3": "3.3.3",
         }
+
         # the default if nothing is specified
-        r_version = "4.1"
+        # Use full version is needed here, so it a valid semver
+        #
+        # NOTE: When updating this version, also update
+        #       - tests/unit/test_r.py -> test_version_specification
+        #       - tests/r/r-rspm-apt/verify
+        #
+        r_version = version_map["4.2"]
 
         if not hasattr(self, "_r_version"):
             parts = self.runtime.split("-")
+            # If runtime.txt is not set, or if it isn't of the form r-<version>-<yyyy>-<mm>-<dd>,
+            # we don't use any of it in determining r version and just use the default
             if len(parts) == 5:
                 r_version = parts[1]
-                if r_version not in version_map:
-                    raise ValueError(
-                        "Version '{}' of R is not supported.".format(r_version)
-                    )
+                # For versions of form x.y, we want to explicitly provide x.y.z - latest patchlevel
+                # available. Users can however explicitly specify the full version to get something specific
+                if r_version in version_map:
+                    r_version = version_map[r_version]
 
             # translate to the full version string
-            self._r_version = version_map.get(r_version)
+            self._r_version = r_version
 
         return self._r_version
 
@@ -138,8 +139,22 @@ class RBuildPack(PythonBuildPack):
                 self._checkpoint_date = datetime.date.today() - datetime.timedelta(
                     days=2
                 )
-                self._runtime = "r-{}".format(str(self._checkpoint_date))
+                self._runtime = f"r-{str(self._checkpoint_date)}"
             return True
+
+    def get_env(self):
+        """
+        Set custom env vars needed for RStudio to load
+        """
+        return super().get_env() + [
+            # rstudio (rsession) can't seem to find R unless we explicitly tell it where
+            # it is - just $PATH isn't enough. I discovered these are the env vars it
+            # looks for by digging through RStudio source and finding
+            # https://github.com/rstudio/rstudio/blob/v2022.02.3+492/src/cpp/r/session/RDiscovery.cpp
+            ("R_HOME", f"/opt/R/{self.r_version}/lib/R"),
+            ("R_DOC_DIR", "${R_HOME}/doc"),
+            ("LD_LIBRARY_PATH", "${R_HOME}/lib:${LD_LIBRARY_PATH}"),
+        ]
 
     def get_path(self):
         """
@@ -177,12 +192,6 @@ class RBuildPack(PythonBuildPack):
             "sudo",
             "lsb-release",
         ]
-        # For R 3.4 we use the default Ubuntu package, for other versions we
-        # install from a different apt repository
-        if V(self.r_version) < V("3.5"):
-            packages.append("r-base")
-            packages.append("r-base-dev")
-            packages.append("libclang-dev")
 
         return super().get_packages().union(packages)
 
@@ -214,7 +223,7 @@ class RBuildPack(PythonBuildPack):
         for i in range(max_days_prior):
             try_date = snapshot_date - datetime.timedelta(days=i)
             # Fall back to MRAN if packagemanager.rstudio.com doesn't have it
-            url = "https://mran.microsoft.com/snapshot/{}".format(try_date.isoformat())
+            url = f"https://mran.microsoft.com/snapshot/{try_date.isoformat()}"
             r = requests.head(url)
             if r.ok:
                 return url
@@ -268,46 +277,25 @@ class RBuildPack(PythonBuildPack):
 
         cran_mirror_url = self.get_cran_mirror_url(self.checkpoint_date)
 
-        # Determine which R apt repository should be enabled
-        if V(self.r_version) >= V("3.5"):
-            if V(self.r_version) >= V("4"):
-                vs = "40"
-            else:
-                vs = "35"
-
         scripts = [
             (
                 "root",
                 rf"""
-                echo "deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran{vs}/" > /etc/apt/sources.list.d/r-ubuntu.list
-                """,
-            ),
-            # Dont use apt-key directly, as gpg does not always respect *_proxy vars. This increase the chances
-            # of being able to reach it from behind a firewall
-            (
-                "root",
-                r"""
-                wget --quiet -O - 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xe298a3a825c0d65dfd57cbb651716619e084dab9' | apt-key add -
-                """,
-            ),
-            (
-                "root",
-                # we should have --no-install-recommends on all our apt-get install commands,
-                # but here it's important because it will pull in CRAN packages
-                # via r-recommends, which is only guaranteed to be compatible with the latest r-base-core
-                r"""
                 apt-get update > /dev/null && \
                 apt-get install --yes --no-install-recommends \
-                        r-base-core={R_version} \
-                        r-base-dev={R_version} \
                         libclang-dev \
                         libzmq3-dev > /dev/null && \
+                wget --quiet -O /tmp/r-{self.r_version}.deb \
+                    https://cdn.rstudio.com/r/ubuntu-$(. /etc/os-release && echo $VERSION_ID | sed 's/\.//')/pkgs/r-{self.r_version}_1_amd64.deb && \
+                apt install --yes --no-install-recommends /tmp/r-{self.r_version}.deb > /dev/null && \
+                rm /tmp/r-{self.r_version}.deb && \
                 apt-get -qq purge && \
                 apt-get -qq clean && \
-                rm -rf /var/lib/apt/lists/*
-                """.format(
-                    R_version=self.r_version
-                ),
+                rm -rf /var/lib/apt/lists/* && \
+                ln -s /opt/R/{self.r_version}/bin/R /usr/local/bin/R && \
+                ln -s /opt/R/{self.r_version}/bin/Rscript /usr/local/bin/Rscript && \
+                R --version
+                """,
             ),
         ]
 
@@ -326,9 +314,9 @@ class RBuildPack(PythonBuildPack):
                 # Set paths so that RStudio shares libraries with base R
                 # install. This first comments out any R_LIBS_USER that
                 # might be set in /etc/R/Renviron and then sets it.
-                r"""
-                sed -i -e '/^R_LIBS_USER=/s/^/#/' /etc/R/Renviron && \
-                echo "R_LIBS_USER=${R_LIBS_USER}" >> /etc/R/Renviron
+                rf"""
+                sed -i -e '/^R_LIBS_USER=/s/^/#/' /opt/R/{self.r_version}/lib/R/etc/Renviron && \
+                echo "R_LIBS_USER=${{R_LIBS_USER}}" >> /opt/R/{self.r_version}/lib/R/etc/Renviron
                 """,
             ),
             (
@@ -338,25 +326,20 @@ class RBuildPack(PythonBuildPack):
                 # Quite hilarious, IMO.
                 # See https://docs.rstudio.com/rspm/1.0.12/admin/binaries.html
                 # Set mirror for RStudio too, by modifying rsession.conf
-                r"""
+                rf"""
                 R RHOME && \
-                mkdir -p /usr/lib/R/etc /etc/rstudio && \
-                echo 'options(repos = c(CRAN = "{cran_mirror_url}"))' > /usr/lib/R/etc/Rprofile.site && \
-                echo 'options(HTTPUserAgent = sprintf("R/%s R (%s)", getRversion(), paste(getRversion(), R.version$platform, R.version$arch, R.version$os)))' >> /usr/lib/R/etc/Rprofile.site && \
+                mkdir -p /etc/rstudio && \
+                echo 'options(repos = c(CRAN = "{cran_mirror_url}"))' > /opt/R/{self.r_version}/lib/R/etc/Rprofile.site && \
                 echo 'r-cran-repos={cran_mirror_url}' > /etc/rstudio/rsession.conf
-                """.format(
-                    cran_mirror_url=cran_mirror_url
-                ),
+                """,
             ),
             (
                 "${NB_USER}",
                 # Install a pinned version of devtools, IRKernel and shiny
-                r"""
-                R --quiet -e "install.packages(c('devtools', 'IRkernel', 'shiny'), repos='{devtools_cran_mirror_url}')" && \
+                rf"""
+                R --quiet -e "install.packages(c('devtools', 'IRkernel', 'shiny'), repos='{self.get_devtools_snapshot_url()}')" && \
                 R --quiet -e "IRkernel::installspec(prefix='$NB_PYTHON_PREFIX')"
-                """.format(
-                    devtools_cran_mirror_url=self.get_devtools_snapshot_url()
-                ),
+                """,
             ),
         ]
 
@@ -389,8 +372,7 @@ class RBuildPack(PythonBuildPack):
                     "${NB_USER}",
                     # Delete /tmp/downloaded_packages only if install.R fails, as the second
                     # invocation of install.R might be able to reuse them
-                    "Rscript %s && touch /tmp/.preassembled || true && rm -rf /tmp/downloaded_packages"
-                    % installR_path,
+                    f"Rscript {installR_path} && touch /tmp/.preassembled || true && rm -rf /tmp/downloaded_packages",
                 )
             ]
 
@@ -407,9 +389,7 @@ class RBuildPack(PythonBuildPack):
                     "${NB_USER}",
                     # only run install.R if the pre-assembly failed
                     # Delete any downloaded packages in /tmp, as they aren't reused by R
-                    """if [ ! -f /tmp/.preassembled ]; then Rscript {}; rm -rf /tmp/downloaded_packages; fi""".format(
-                        installR_path
-                    ),
+                    f"""if [ ! -f /tmp/.preassembled ]; then Rscript {installR_path}; rm -rf /tmp/downloaded_packages; fi""",
                 )
             ]
 

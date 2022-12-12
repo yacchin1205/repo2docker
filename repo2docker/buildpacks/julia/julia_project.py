@@ -6,8 +6,8 @@ import requests
 import semver
 import toml
 
-from ..python import PythonBuildPack
 from ...semver import find_semver_match
+from ..python import PythonBuildPack
 
 
 class JuliaProjectTomlBuildPack(PythonBuildPack):
@@ -50,6 +50,16 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             compat = project_toml["compat"]["julia"]
         except:
             # Default version which needs to be manually updated with new major.minor releases
+            #
+            # NOTE: Updates to the default version should go hand in hand with
+            #       updates to tests/julia/project/verify where is intent to
+            #       test the version.
+            #
+            # FIXME: When compat = "1.6" is set below and passed to
+            #        find_semver_match, we get 1.8.2 as of 2022-10-09. We should
+            #        clarify the desired behavior and have a unit test of
+            #        find_semver_match to validate it.
+            #
             compat = "1.6"
 
         match = find_semver_match(compat, self.all_julias)
@@ -83,8 +93,15 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             ("JUPYTER_DATA_DIR", "${NB_PYTHON_PREFIX}/share/jupyter"),
         ]
 
+    @property
+    def project_dir(self):
+        if self.binder_dir:
+            return "${REPO_DIR}/" + self.binder_dir
+        else:
+            return "${REPO_DIR}"
+
     def get_env(self):
-        return super().get_env() + [("JULIA_PROJECT", "${REPO_DIR}")]
+        return super().get_env() + [("JULIA_PROJECT", self.project_dir)]
 
     def get_path(self):
         """Adds path to Julia binaries to user's PATH.
@@ -138,15 +155,19 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
         The parent, CondaBuildPack, will add the build steps for
         any needed Python packages found in environment.yml.
         """
-        return super().get_assemble_scripts() + [
+        scripts = super().get_assemble_scripts()
+        scripts.append(
             (
                 "${NB_USER}",
                 r"""
-                JULIA_PROJECT="" julia -e "using Pkg; Pkg.add(\"IJulia\"); using IJulia; installkernel(\"Julia\", \"--project=${REPO_DIR}\");" && \
-                julia --project=${REPO_DIR} -e 'using Pkg; Pkg.instantiate(); Pkg.resolve(); pkg"precompile"'
-                """,
+            JULIA_PROJECT="" julia -e "using Pkg; Pkg.add(\"IJulia\"); using IJulia; installkernel(\"Julia\", \"--project={project}\");" && \
+            julia --project={project} -e 'using Pkg; Pkg.instantiate(); Pkg.resolve(); pkg"precompile"'
+            """.format(
+                    project=self.project_dir
+                ),
             )
-        ]
+        )
+        return scripts
 
     def detect(self):
         """

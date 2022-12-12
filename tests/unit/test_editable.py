@@ -5,7 +5,6 @@ import time
 
 from repo2docker.__main__ import make_r2d
 
-
 DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dockerfile", "editable")
 
 
@@ -48,12 +47,12 @@ def test_editable_by_host():
                 ["sh", "-c", "ls testfile????????.txt"]
             )
             assert status == 0
-            assert re.match(br"^testfile\w{8}\.txt\n$", output) is not None
+            assert re.match(rb"^testfile\w{8}\.txt\n$", output) is not None
         # After exiting the with block the file should stop existing
         # in the container as well as locally
         status, output = container._c.exec_run(["sh", "-c", "ls testfile????????.txt"])
         assert status == 2
-        assert re.match(br"^testfile\w{8}\.txt\n$", output) is None
+        assert re.match(rb"^testfile\w{8}\.txt\n$", output) is None
 
     finally:
         # stop the container, we don't care how it stops or

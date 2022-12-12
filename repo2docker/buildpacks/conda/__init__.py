@@ -5,9 +5,9 @@ from collections.abc import Mapping
 
 from ruamel.yaml import YAML
 
-from ..base import BaseImage
-from .._r_base import rstudio_base_scripts
 from ...utils import is_local_pip_requirement
+from .._r_base import rstudio_base_scripts
+from ..base import BaseImage
 
 # pattern for parsing conda dependency line
 PYTHON_REGEX = re.compile(r"python\s*=+\s*([\d\.]*)")
@@ -154,7 +154,7 @@ class CondaBuildPack(BaseImage):
             "conda/activate-conda.sh": "/etc/profile.d/activate-conda.sh",
         }
         py_version = self.python_version
-        self.log.info("Building conda environment for python=%s" % py_version)
+        self.log.info(f"Building conda environment for python={py_version}\n")
         # Select the frozen base environment based on Python version.
         # avoids expensive and possibly conflicting upgrades when changing
         # major Python versions during upgrade.
@@ -163,7 +163,7 @@ class CondaBuildPack(BaseImage):
         frozen_name = "environment.lock"
         pip_frozen_name = "requirements.txt"
         if py_version:
-            if self.py2:
+            if self.python_version == "2.7":
                 # python 2 goes in a different env
                 files[
                     "conda/environment.py-2.7.lock"
@@ -180,8 +180,8 @@ class CondaBuildPack(BaseImage):
                 if os.path.exists(os.path.join(HERE, py_frozen_name)):
                     frozen_name = py_frozen_name
                     pip_frozen_name = f"requirements.py-{py_version}.pip"
-                if not frozen_name:
-                    self.log.warning(f"No frozen env for {py_version}")
+                else:
+                    raise ValueError(f"Python version {py_version} is not supported!")
         files[
             "conda/" + frozen_name
         ] = self._nb_environment_file = "/tmp/env/environment.lock"
@@ -341,15 +341,13 @@ class CondaBuildPack(BaseImage):
             scripts.append(
                 (
                     "${NB_USER}",
-                    r"""
+                    rf"""
                 TIMEFORMAT='time: %3R' \
-                bash -c 'time ${{MAMBA_EXE}} env update -p {0} --file "{1}" && \
+                bash -c 'time ${{MAMBA_EXE}} env update -p {env_prefix} --file "{environment_yml}" && \
                 time ${{MAMBA_EXE}} clean --all -f -y && \
-                ${{MAMBA_EXE}} list -p {0} \
+                ${{MAMBA_EXE}} list -p {env_prefix} \
                 '
-                """.format(
-                        env_prefix, environment_yml
-                    ),
+                """,
                 )
             )
 
@@ -361,37 +359,31 @@ class CondaBuildPack(BaseImage):
             scripts.append(
                 (
                     "${NB_USER}",
-                    r"""
-                ${{MAMBA_EXE}} install -p {0} r-base{1} r-irkernel=1.2 r-devtools -y && \
+                    rf"""
+                ${{MAMBA_EXE}} install -p {env_prefix} r-base{r_pin} r-irkernel r-devtools -y && \
                 ${{MAMBA_EXE}} clean --all -f -y && \
-                ${{MAMBA_EXE}} list -p {0}
-                """.format(
-                        env_prefix, r_pin
-                    ),
+                ${{MAMBA_EXE}} list -p {env_prefix}
+                """,
                 )
             )
             scripts += rstudio_base_scripts(self.r_version)
             scripts += [
                 (
                     "root",
-                    r"""
+                    rf"""
                     echo auth-none=1 >> /etc/rstudio/rserver.conf && \
                     echo auth-minimum-user-id=0 >> /etc/rstudio/rserver.conf && \
-                    echo "rsession-which-r={0}/bin/R" >> /etc/rstudio/rserver.conf && \
-                    echo "rsession-ld-library-path={0}/lib" >> /etc/rstudio/rserver.conf && \
+                    echo "rsession-which-r={env_prefix}/bin/R" >> /etc/rstudio/rserver.conf && \
+                    echo "rsession-ld-library-path={env_prefix}/lib" >> /etc/rstudio/rserver.conf && \
                     echo www-frame-origin=same >> /etc/rstudio/rserver.conf
-                    """.format(
-                        env_prefix
-                    ),
+                    """,
                 ),
                 (
                     "${NB_USER}",
-                    # Install a pinned version of IRKernel and set it up for use!
-                    r"""
-                 R --quiet -e "IRkernel::installspec(prefix='{0}')"
-                 """.format(
-                        env_prefix
-                    ),
+                    # Register the jupyter kernel
+                    rf"""
+                 R --quiet -e "IRkernel::installspec(prefix='{env_prefix}')"
+                 """,
                 ),
             ]
         return scripts
