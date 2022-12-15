@@ -54,7 +54,7 @@ jobs:
   publish-docker:
     runs-on: ubuntu-22.04
     env:
-      DEFAULT_REGISTRY: quay.io
+      DEFAULT_REGISTRY: gcr.io
       IMAGE_NAME: jupyterhub/repo2docker
 
     services:
