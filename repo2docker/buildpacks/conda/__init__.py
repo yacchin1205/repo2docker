@@ -1,8 +1,10 @@
 """BuildPack for conda environments"""
+import datetime
 import os
 import re
 from collections.abc import Mapping
 
+import requests
 from ruamel.yaml import YAML
 
 from ...utils import is_local_pip_requirement
@@ -423,15 +425,34 @@ class CondaBuildPack(BaseImage):
 
         installR_path = self.binder_path("install.R")
         if os.path.exists(installR_path):
+            repo_url = self.get_mran_snapshot_url(datetime.datetime.now())
             scripts += [
                 (
                     "${NB_USER}",
                     # Delete any downloaded packages in /tmp, as they aren't reused by R
-                    f"""Rscript {installR_path} && rm -rf /tmp/downloaded_packages""",
+                    f"""echo 'r = getOption("repos")' > /tmp/install.R && \
+                    echo 'r["CRAN"] = "{repo_url}"' >> /tmp/install.R && \
+                    echo 'options(repos = r)' >> /tmp/install.R && \
+                    cat {installR_path} >> /tmp/install.R && \
+                    Rscript /tmp/install.R && rm -rf /tmp/downloaded_packages""",
                 )
             ]
 
         return scripts
+
+    def get_mran_snapshot_url(self, snapshot_date, max_days_prior=7):
+        for i in range(max_days_prior):
+            try_date = snapshot_date - datetime.timedelta(days=i)
+            # Fall back to MRAN if packagemanager.rstudio.com doesn't have it
+            url = f"https://mran.microsoft.com/snapshot/{try_date.isoformat()}"
+            r = requests.head(url)
+            if r.ok:
+                return url
+        raise ValueError(
+            "No snapshot found for {} or {} days prior in mran.microsoft.com".format(
+                snapshot_date.strftime("%Y-%m-%d"), max_days_prior
+            )
+        )
 
     def get_custom_extension_script(self, post):
         grdm_jlab_release_url = (
