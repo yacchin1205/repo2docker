@@ -420,6 +420,17 @@ class CondaBuildPack(BaseImage):
         scripts = super().get_assemble_scripts()
         if not self._should_preassemble_env:
             scripts.extend(self.get_env_scripts())
+
+        installR_path = self.binder_path("install.R")
+        if os.path.exists(installR_path):
+            scripts += [
+                (
+                    "${NB_USER}",
+                    # Delete any downloaded packages in /tmp, as they aren't reused by R
+                    f"""Rscript {installR_path}; rm -rf /tmp/downloaded_packages""",
+                )
+            ]
+
         return scripts
 
     def get_custom_extension_script(self, post):
