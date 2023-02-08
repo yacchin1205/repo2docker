@@ -427,7 +427,7 @@ class CondaBuildPack(BaseImage):
                 (
                     "${NB_USER}",
                     # Delete any downloaded packages in /tmp, as they aren't reused by R
-                    f"""Rscript {installR_path}; rm -rf /tmp/downloaded_packages""",
+                    f"""Rscript {installR_path} && rm -rf /tmp/downloaded_packages""",
                 )
             ]
 
