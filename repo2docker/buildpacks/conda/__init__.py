@@ -425,7 +425,7 @@ class CondaBuildPack(BaseImage):
 
         installR_path = self.binder_path("install.R")
         if os.path.exists(installR_path):
-            repo_url = self.get_mran_snapshot_url(datetime.datetime.now())
+            repo_url = 'https://cran.microsoft.com/'
             scripts += [
                 (
                     "${NB_USER}",
@@ -439,20 +439,6 @@ class CondaBuildPack(BaseImage):
             ]
 
         return scripts
-
-    def get_mran_snapshot_url(self, snapshot_date, max_days_prior=7):
-        for i in range(max_days_prior):
-            try_date = snapshot_date - datetime.timedelta(days=i)
-            # Fall back to MRAN if packagemanager.rstudio.com doesn't have it
-            url = f"https://mran.microsoft.com/snapshot/{try_date.isoformat()}"
-            r = requests.head(url)
-            if r.ok:
-                return url
-        raise ValueError(
-            "No snapshot found for {} or {} days prior in mran.microsoft.com".format(
-                snapshot_date.strftime("%Y-%m-%d"), max_days_prior
-            )
-        )
 
     def get_custom_extension_script(self, post):
         grdm_jlab_release_url = (
