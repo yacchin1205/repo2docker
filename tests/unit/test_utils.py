@@ -1,12 +1,15 @@
 """
 Tests for repo2docker/utils.py
 """
-import traitlets
 import os
-from repo2docker import utils
-import pytest
+import platform
 import subprocess
 import tempfile
+
+import pytest
+import traitlets
+
+from repo2docker import utils
 
 
 def test_capture_cmd_no_capture_success():
@@ -90,7 +93,7 @@ def test_invalid_port_mapping(port_spec):
     with pytest.raises(ValueError) as e:
         utils.validate_and_generate_port_mapping([port_spec])
 
-    assert 'Port specification "{}"'.format(port_spec) in str(e.value)
+    assert f'Port specification "{port_spec}"' in str(e.value)
 
 
 def test_deep_get():
@@ -158,3 +161,17 @@ def test_open_guess_encoding():
 )
 def test_local_pip_requirement(req, is_local):
     assert utils.is_local_pip_requirement(req) == is_local
+
+
+@pytest.mark.parametrize(
+    "machine_name,expected",
+    [
+        ("x86_64", "linux/amd64"),
+        ("aarch64", "linux/arm64"),
+        ("arm64", "linux/arm64"),
+        ("other", "linux/amd64"),
+    ],
+)
+def test_get_platform(monkeypatch, machine_name, expected):
+    monkeypatch.setattr(platform, "machine", lambda: machine_name)
+    assert utils.get_platform() == expected

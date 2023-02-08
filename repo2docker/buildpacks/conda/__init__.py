@@ -5,9 +5,9 @@ from collections.abc import Mapping
 
 from ruamel.yaml import YAML
 
-from ..base import BaseImage
-from .._r_base import rstudio_base_scripts
 from ...utils import is_local_pip_requirement
+from .._r_base import rstudio_base_scripts
+from ..base import BaseImage
 
 # pattern for parsing conda dependency line
 PYTHON_REGEX = re.compile(r"python\s*=+\s*([\d\.]*)")
@@ -35,6 +35,14 @@ class CondaBuildPack(BaseImage):
     # extra pip requirements.txt for the notebook env
     _nb_requirements_file = ""
 
+    def _conda_platform(self):
+        """Return the conda platform name for the current platform"""
+        if self.platform == "linux/amd64":
+            return "linux-64"
+        if self.platform == "linux/arm64":
+            return "linux-aarch64"
+        raise ValueError(f"Unknown platform {self.platform}")
+
     def get_build_env(self):
         """Return environment variables to be set.
 
@@ -59,6 +67,7 @@ class CondaBuildPack(BaseImage):
             # this exe should be used for installs after bootstrap with micromamba
             # switch this to /usr/local/bin/micromamba to use it for all installs
             ("MAMBA_EXE", "${CONDA_DIR}/bin/mamba"),
+            ("CONDA_PLATFORM", self._conda_platform()),
         ]
         if self._nb_requirements_file:
             env.append(("NB_REQUIREMENTS_FILE", self._nb_requirements_file))
@@ -154,19 +163,24 @@ class CondaBuildPack(BaseImage):
             "conda/activate-conda.sh": "/etc/profile.d/activate-conda.sh",
         }
         py_version = self.python_version
-        self.log.info("Building conda environment for python=%s" % py_version)
+        self.log.info(f"Building conda environment for python={py_version}\n")
         # Select the frozen base environment based on Python version.
         # avoids expensive and possibly conflicting upgrades when changing
         # major Python versions during upgrade.
         # If no version is specified or no matching X.Y version is found,
         # the default base environment is used.
-        frozen_name = "environment.lock"
+        frozen_name = f"environment-{self._conda_platform()}.lock"
         pip_frozen_name = "requirements.txt"
         if py_version:
-            if self.py2:
+            if self.python_version == "2.7":
+                if "linux-64" != self._conda_platform():
+                    raise ValueError(
+                        f"Python version 2.7 {self._conda_platform()} is not supported!"
+                    )
+
                 # python 2 goes in a different env
                 files[
-                    "conda/environment.py-2.7.lock"
+                    "conda/environment.py-2.7-linux-64.lock"
                 ] = self._kernel_environment_file = "/tmp/env/kernel-environment.lock"
                 # additional pip requirements for kernel env
                 if os.path.exists(os.path.join(HERE, "requirements.py-2.7.txt")):
@@ -176,12 +190,16 @@ class CondaBuildPack(BaseImage):
                         self._kernel_requirements_file
                     ) = "/tmp/env/kernel-requirements.txt"
             else:
-                py_frozen_name = f"environment.py-{py_version}.lock"
+                py_frozen_name = (
+                    f"environment.py-{py_version}-{self._conda_platform()}.lock"
+                )
                 if os.path.exists(os.path.join(HERE, py_frozen_name)):
                     frozen_name = py_frozen_name
                     pip_frozen_name = f"requirements.py-{py_version}.pip"
-                if not frozen_name:
-                    self.log.warning(f"No frozen env for {py_version}")
+                else:
+                    raise ValueError(
+                        f"Python version {py_version} {self._conda_platform()} is not supported!"
+                    )
         files[
             "conda/" + frozen_name
         ] = self._nb_environment_file = "/tmp/env/environment.lock"
@@ -341,15 +359,13 @@ class CondaBuildPack(BaseImage):
             scripts.append(
                 (
                     "${NB_USER}",
-                    r"""
+                    rf"""
                 TIMEFORMAT='time: %3R' \
-                bash -c 'time ${{MAMBA_EXE}} env update -p {0} --file "{1}" && \
+                bash -c 'time ${{MAMBA_EXE}} env update -p {env_prefix} --file "{environment_yml}" && \
                 time ${{MAMBA_EXE}} clean --all -f -y && \
-                ${{MAMBA_EXE}} list -p {0} \
+                ${{MAMBA_EXE}} list -p {env_prefix} \
                 '
-                """.format(
-                        env_prefix, environment_yml
-                    ),
+                """,
                 )
             )
 
@@ -361,37 +377,35 @@ class CondaBuildPack(BaseImage):
             scripts.append(
                 (
                     "${NB_USER}",
-                    r"""
-                ${{MAMBA_EXE}} install -p {0} r-base{1} r-irkernel=1.2 r-devtools -y && \
+                    rf"""
+                ${{MAMBA_EXE}} install -p {env_prefix} r-base{r_pin} r-irkernel r-devtools -y && \
                 ${{MAMBA_EXE}} clean --all -f -y && \
-                ${{MAMBA_EXE}} list -p {0}
-                """.format(
-                        env_prefix, r_pin
-                    ),
+                ${{MAMBA_EXE}} list -p {env_prefix}
+                """,
                 )
             )
+            if self.platform != "linux/amd64":
+                raise RuntimeError(
+                    f"RStudio is only available for linux/amd64 ({self.platform})"
+                )
             scripts += rstudio_base_scripts(self.r_version)
             scripts += [
                 (
                     "root",
-                    r"""
+                    rf"""
                     echo auth-none=1 >> /etc/rstudio/rserver.conf && \
                     echo auth-minimum-user-id=0 >> /etc/rstudio/rserver.conf && \
-                    echo "rsession-which-r={0}/bin/R" >> /etc/rstudio/rserver.conf && \
-                    echo "rsession-ld-library-path={0}/lib" >> /etc/rstudio/rserver.conf && \
+                    echo "rsession-which-r={env_prefix}/bin/R" >> /etc/rstudio/rserver.conf && \
+                    echo "rsession-ld-library-path={env_prefix}/lib" >> /etc/rstudio/rserver.conf && \
                     echo www-frame-origin=same >> /etc/rstudio/rserver.conf
-                    """.format(
-                        env_prefix
-                    ),
+                    """,
                 ),
                 (
                     "${NB_USER}",
-                    # Install a pinned version of IRKernel and set it up for use!
-                    r"""
-                 R --quiet -e "IRkernel::installspec(prefix='{0}')"
-                 """.format(
-                        env_prefix
-                    ),
+                    # Register the jupyter kernel
+                    rf"""
+                 R --quiet -e "IRkernel::installspec(prefix='{env_prefix}')"
+                 """,
                 ),
             ]
         return scripts

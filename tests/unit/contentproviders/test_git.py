@@ -1,7 +1,9 @@
 import os
-import pytest
 import subprocess
 from tempfile import TemporaryDirectory
+
+import pytest
+
 from repo2docker.contentproviders import Git
 
 
@@ -33,7 +35,7 @@ def test_submodule_clone(repo_with_submodule):
             pass
 
         assert os.path.exists(os.path.join(clone_dir2, "test"))
-        assert not os.path.exists(os.path.join(submod_dir, "test"))
+        assert not os.path.exists(os.path.join(submod_dir, "requirements.txt"))
 
     with TemporaryDirectory() as clone_dir:
         submod_dir = os.path.join(clone_dir, "submod")  # set by fixture
@@ -42,7 +44,7 @@ def test_submodule_clone(repo_with_submodule):
         for _ in git_content.fetch(spec, clone_dir):
             pass
         assert os.path.exists(os.path.join(clone_dir, "test"))
-        assert os.path.exists(os.path.join(submod_dir, "test"))
+        assert os.path.exists(os.path.join(submod_dir, "requirements.txt"))
 
         # get current sha1 of submodule
         cmd = ["git", "rev-parse", "HEAD"]

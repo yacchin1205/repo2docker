@@ -1,19 +1,18 @@
 import json
 import os
-import pytest
 import re
-
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
+
+import pytest
 
 from repo2docker.contentproviders import Dataverse
 
-
 test_dv = Dataverse()
-harvard_dv = next((_ for _ in test_dv.hosts if _["name"] == "Harvard Dataverse"))
-cimmyt_dv = next((_ for _ in test_dv.hosts if _["name"] == "CIMMYT Research Data"))
+harvard_dv = next(_ for _ in test_dv.hosts if _["name"] == "Harvard Dataverse")
+cimmyt_dv = next(_ for _ in test_dv.hosts if _["name"] == "CIMMYT Research Data")
 test_hosts = [
     (
         [
@@ -96,7 +95,6 @@ def test_detect_dataverse(test_input, expected, requests_mock):
 
 @pytest.fixture
 def dv_files(tmpdir):
-
     f1 = tmpdir.join("some-file.txt")
     f1.write("some content")
 
@@ -153,7 +151,7 @@ def test_dataverse_fetch(dv_files, requests_mock):
         for l in dv.fetch(spec, d):
             output.append(l)
         unpacked_files = set(os.listdir(d))
-        expected = set(["directory", "some-file.txt"])
+        expected = {"directory", "some-file.txt"}
         assert expected == unpacked_files
         assert os.path.isfile(
             os.path.join(d, "directory", "subdirectory", "the-other-file.txt")

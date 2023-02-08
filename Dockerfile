@@ -1,4 +1,5 @@
-ARG ALPINE_VERSION=3.15.0
+# syntax = docker/dockerfile:1.3
+ARG ALPINE_VERSION=3.16
 FROM alpine:${ALPINE_VERSION}
 
 RUN apk add --no-cache git python3 python3-dev py-pip build-base
@@ -22,8 +23,7 @@ RUN pip3 install hg-evolve --user --no-cache-dir
 
 # install repo2docker
 COPY --from=0 /tmp/wheelhouse /tmp/wheelhouse
-# Use "--use-deprecated=legacy-resolver" to avoid conflict about osfclient
-RUN pip3 install --use-deprecated=legacy-resolver --no-cache-dir /tmp/wheelhouse/*.whl --ignore-installed \
+RUN pip3 install --no-cache-dir --ignore-installed --no-deps /tmp/wheelhouse/*.whl \
  && pip3 list
 
 # add git-credential helper
