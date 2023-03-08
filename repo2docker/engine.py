@@ -3,8 +3,8 @@ Interface for a repo2docker container engine
 """
 
 from abc import ABC, abstractmethod
-from traitlets.config import LoggingConfigurable
 
+from traitlets.config import LoggingConfigurable
 
 # Based on https://docker-py.readthedocs.io/en/4.2.0/containers.html
 
@@ -131,7 +131,7 @@ class Image:
         return self._config
 
     def __repr__(self):
-        return "Image(tags={},config={})".format(self.tags, self.config)
+        return f"Image(tags={self.tags},config={self.config})"
 
 
 class ContainerEngine(LoggingConfigurable):
@@ -177,6 +177,7 @@ class ContainerEngine(LoggingConfigurable):
         fileobj=None,
         path="",
         labels=None,
+        platform=None,
         **kwargs,
     ):
         """
@@ -207,6 +208,8 @@ class ContainerEngine(LoggingConfigurable):
             path to the Dockerfile
         labels : dict
             Dictionary of labels to set on the image
+        platform: str
+            Platform to build for
 
         Returns
         -------

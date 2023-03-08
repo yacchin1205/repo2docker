@@ -14,19 +14,11 @@ def rstudio_base_scripts(r_version):
     shiny_proxy_version = "1.1"
     shiny_sha256sum = "80f1e48f6c824be7ef9c843bb7911d4981ac7e8a963e0eff823936a8b28476ee"
 
-    if V(r_version) <= V("4.1"):
-        # Older RStudio and jupyter-rsession-proxy for v4.1 and below
-        rstudio_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-1.3.959-amd64.deb"
-        rstudio_sha256sum = (
-            "187af05cab1221282487fdc33f4b161484c3228eaade3d6697b1d41c206ee6d9"
-        )
-        rsession_proxy_version = "1.4"
-    else:
-        rstudio_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2021.09.1-372-amd64.deb"
-        rstudio_sha256sum = (
-            "c58df09468870b89f1796445853dce2dacaa0fc5b7bb1f92b036fa8da1d1f8a3"
-        )
-        rsession_proxy_version = "2.0.1"
+    rstudio_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2022.02.1-461-amd64.deb"
+    rstudio_sha256sum = (
+        "239e8d93e103872e7c6d827113d88871965f82ffb0397f5638025100520d8a54"
+    )
+    rsession_proxy_version = "2.0.1"
 
     return [
         (
@@ -34,35 +26,27 @@ def rstudio_base_scripts(r_version):
             # we should have --no-install-recommends on all our apt-get install commands,
             # but here it's important because these recommend r-base,
             # which will upgrade the installed version of R, undoing our pinned version
-            r"""
+            rf"""
             curl --silent --location --fail {rstudio_url} > /tmp/rstudio.deb && \
             curl --silent --location --fail {shiny_server_url} > /tmp/shiny.deb && \
             echo '{rstudio_sha256sum} /tmp/rstudio.deb' | sha256sum -c - && \
             echo '{shiny_sha256sum} /tmp/shiny.deb' | sha256sum -c - && \
             apt-get update > /dev/null && \
             apt install -y --no-install-recommends /tmp/rstudio.deb /tmp/shiny.deb && \
-            rm /tmp/rstudio.deb && \
+            rm /tmp/*.deb && \
             apt-get -qq purge && \
             apt-get -qq clean && \
             rm -rf /var/lib/apt/lists/*
-            """.format(
-                rstudio_url=rstudio_url,
-                rstudio_sha256sum=rstudio_sha256sum,
-                shiny_server_url=shiny_server_url,
-                shiny_sha256sum=shiny_sha256sum,
-            ),
+            """,
         ),
         (
             "${NB_USER}",
             # Install jupyter-rsession-proxy
-            r"""
+            rf"""
                 pip install --no-cache \
                     jupyter-rsession-proxy=={rsession_proxy_version} \
                     jupyter-shiny-proxy=={shiny_proxy_version}
-                """.format(
-                rsession_proxy_version=rsession_proxy_version,
-                shiny_proxy_version=shiny_proxy_version,
-            ),
+                """,
         ),
         (
             # Not all of these locations are configurable; so we make sure

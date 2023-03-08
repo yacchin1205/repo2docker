@@ -2,11 +2,66 @@
 Changelog
 =========
 
+Version 2022.10.0
+=================
+
+`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2022.02.0...2022.10.0>`__
+
+New features
+------------
+
+- Update Jupyter dependencies :pr:`1193` by :user:`jtpio`
+- add Python 3.10 base environment :pr:`1175` by :user:`minrk`
+- Bump default R version to 4.2 from 4.1, and let R 3.4 go from 3.4.0 to 3.4.4 :pr:`1165` by :user:`yuvipanda`
+- Support pulling from zenodo sandbox too :pr:`1169` by :user:`yuvipanda`
+- Add MPDL Dataverse :pr:`1167` by :user:`wilhelmfrank`
+- Add JPL Dataverse :pr:`1163` by :user:`foobarbecue`
+- upgrade RStudio Server to v2022.02.1 :pr:`1148` by :user:`aplamada`
+- Pass build_args to `render()` during `--no-build` for consistency with regular builds :pr:`1135` by :user:`yoogottamk`
+
+Documentation improvements
+--------------------------
+
+- Update 'how to get R' section :pr:`1147` by :user:`yuvipanda`
+- Post release fixes :pr:`1133` by :user:`manics`
+
+API changes
+-----------
+
+Bug fixes
+---------
+- consistent log handling when not using JSON loggers :pr:`1177` by :user:`minrk`
+- Fix Read-Only filesystem permission issue for log file :pr:`1156` by :user:`timeu`
+- handle permission issue writing .jupyter-server-log.txt in REPO_DIR :pr:`1151` by :user:`pymonger`
+- handle r version being unspecified in environment.yml :pr:`1141` by :user:`minrk`
+
+Other merged PRs
+----------------
+
+- Remove conda buildpacks pin of r-irkernel to 1.2 :pr:`1191` by :user:`consideRatio`
+- ci: refactor julia/r/conda tests - now ~25 min instead of ~50 min :pr:`1188` by :user:`consideRatio`
+- ci: general refresh of github workflows, update gha versions and let dependabot do it, etc. :pr:`1186` by :user:`consideRatio`
+- Use enum to standardise `phase` :pr:`1185` by :user:`manics`
+- fail on unsupported Python :pr:`1184` by :user:`minrk`
+- mount wheels from build stage instead of copying them :pr:`1182` by :user:`minrk`
+- get CI working again :pr:`1178` by :user:`minrk`
+- explicitly build linux/amd64 images :pr:`1176` by :user:`minrk`
+- Freeze.py update :pr:`1173` by :user:`manics`
+- Bump version of nodejs :pr:`1172` by :user:`yuvipanda`
+- Update mamba :pr:`1171` by :user:`SylvainCorlay`
+- ci: switch to using a 2fa enabled accounts pypi api-token :pr:`1166` by :user:`consideRatio`
+- Get R from RStudio provided apt packages (.deb files) :pr:`1161` by :user:`yuvipanda`
+- Shallow clone HEAD :pr:`1160` by :user:`daradib`
+- Update black version :pr:`1150` by :user:`yuvipanda`
+- Update base notebook packages :pr:`1149` by :user:`yuvipanda`
+- Update Dockerfile to current Alpine (ALPINE_VERSION=3.15.0) :pr:`1136` by :user:`holzman`
+- update Python in some dockerfile tests :pr:`1130` by :user:`minrk`
+
 
 Version 2022.02.0
 =================
 
-`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.08.0...2022.01.0>`_
+`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.08.0...2022.02.0>`__
 
 New features
 ------------
@@ -22,7 +77,7 @@ New features
 - Set labels when building image from Dockerfile :pr:`1097` by :user:`TimoRoth`
 - jupyterlab 3.1.17 :pr:`1092` by :user:`minrk`
 - Bump JupyterLab to 3.1.11 :pr:`1081` by :user:`choldgraf`
-- Bootstrap base env with micromamba :pr:`1062` by :user:`wolfv ` 
+- Bootstrap base env with micromamba :pr:`1062` by :user:`wolfv`
 - Default UI to JupyterLab :pr:`1035` by :user:`SylvainCorlay`
 
 API changes
@@ -56,7 +111,7 @@ Other merged PRs
 Version 2021.08.0
 =================
 
-`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.03.0...2021.08.0>`_
+`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.03.0...2021.08.0>`__
 
 The repo2docker container image has moved to `quay.io/jupyterhub/repo2docker <https://quay.io/repository/jupyterhub/repo2docker?tab=tags>`_
 
@@ -102,14 +157,14 @@ Other merged PRs
 Version 2021.03.0
 =================
 
-`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.01.0...2021.03.0>`_
+`Full changelog <https://github.com/jupyterhub/repo2docker/compare/2021.01.0...2021.03.0>`__
 
 New features
 ------------
 
 - freeze with mamba, add 3.9 :pr:`1017` by :user:`minrk`
 - Add GH workflow to push releases to PYPi and introduce CalVer :pr:`1004` by :user:`betatim`
-- Add entrypoint script which automatically propagates *_PROXY env vars… :pr:`1003` ([@g-braeunlich](https://github.com/g-braeunlich))
+- Add entrypoint script which automatically propagates \*_PROXY env vars… :pr:`1003` ([@g-braeunlich](https://github.com/g-braeunlich))
 - Update to JupyterLab 3.0 :pr:`996` by :user:`jtpio`
 - Fetch available Julia versions from hosted json :pr:`994` by :user:`tomyun`
 - Add a contentprovider for Software Heritage persistent ID (SWHID) :pr:`988` by :user:`douardda`
@@ -123,7 +178,7 @@ Bug fixes
 ---------
 
 - fix dataverse regression introduced in last release :pr:`1011` by :user:`MridulS`
-- buildpacks.r: dont use apt-key directly to respect *_proxy env vars :pr:`1019` ([@g-braeunlich](https://github.com/g-braeunlich))
+- buildpacks.r: dont use apt-key directly to respect \*_proxy env vars :pr:`1019` ([@g-braeunlich](https://github.com/g-braeunlich))
 
 Other merged PRs
 ----------------
@@ -138,7 +193,7 @@ Other merged PRs
 Version 2021.01.0
 =================
 
-`Full changelog <https://github.com/jupyterhub/repo2docker/compare/0.11.0...2021.01.0>`_
+`Full changelog <https://github.com/jupyterhub/repo2docker/compare/0.11.0...2021.01.0>`__
 
 New features
 ------------

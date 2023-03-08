@@ -1,6 +1,6 @@
 # <a href="https://github.com/jupyterhub/repo2docker"><img src="https://raw.githubusercontent.com/jupyterhub/repo2docker/8731ecf0967cc5fde028c456f2b92be651ebbc18/docs/source/_static/images/repo2docker.png" height="48px" /> repo2docker</a>
 
-[![Build Status](https://github.com/jupyterhub/repo2docker/workflows/Continuous%20Integration/badge.svg)](https://github.com/jupyterhub/repo2docker/actions)
+[![Build Status](https://github.com/jupyterhub/repo2docker/workflows/Test/badge.svg)](https://github.com/jupyterhub/repo2docker/actions)
 [![Documentation Status](https://readthedocs.org/projects/repo2docker/badge/?version=latest)](http://repo2docker.readthedocs.io/en/latest/?badge=latest)
 [![Contribute](https://img.shields.io/badge/I_want_to_contribute!-grey?logo=jupyter)](https://repo2docker.readthedocs.io/en/latest/contributing/contributing.html)
 [![Docker Repository on Quay](https://img.shields.io/badge/quay.io-container-green "Docker Repository on Quay")](https://quay.io/repository/jupyterhub/repo2docker?tab=tags)
@@ -31,6 +31,7 @@ For more information, please visit
 ---
 
 ## Using repo2docker
+
 ### Prerequisites
 
 1. Docker to build & run the repositories. The [community edition](https://store.docker.com/search?type=edition&offering=community)
@@ -83,20 +84,18 @@ something like:
 If you copy paste that URL into your browser you will see a Jupyter Notebook
 with the contents of the repository you had just built!
 
-For more information on how to use ``repo2docker``, see the
+For more information on how to use `repo2docker`, see the
 [usage guide](http://repo2docker.readthedocs.io/en/latest/usage.html).
-
 
 ## Repository specifications
 
 Repo2Docker looks for configuration files in the source repository to
 determine how the Docker image should be built. For a list of the configuration
-files that ``repo2docker`` can use, see the
+files that `repo2docker` can use, see the
 [complete list of configuration files](https://repo2docker.readthedocs.io/en/latest/config_files.html).
 
 The philosophy of repo2docker is inspired by
 [Heroku Build Packs](https://devcenter.heroku.com/articles/buildpacks).
-
 
 ## Docker Image
 

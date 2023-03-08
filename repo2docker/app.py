@@ -7,24 +7,24 @@ Usage:
 
     python -m repo2docker https://github.com/you/your-repo
 """
+import getpass
 import json
-import sys
 import logging
 import os
-import entrypoints
-import getpass
 import shutil
+import sys
 import tempfile
 import time
+import warnings
 from urllib.parse import urlparse
 
+import entrypoints
 import escapism
 from pythonjsonlogger import jsonlogger
-
-from traitlets import Any, Dict, Int, List, Unicode, Bool, default
+from traitlets import Any, Bool, Dict, Int, List, Unicode, default, observe
 from traitlets.config import Application
 
-from . import __version__
+from . import __version__, contentproviders
 from .buildpacks import (
     CondaBuildPack,
     DockerBuildPack,
@@ -36,9 +36,8 @@ from .buildpacks import (
     PythonBuildPack,
     RBuildPack,
 )
-from . import contentproviders
 from .engine import BuildError, ContainerEngineException, ImageLoadError
-from .utils import ByteSpecification, chdir
+from .utils import ByteSpecification, R2dState, chdir, get_platform
 
 
 class Repo2Docker(Application):
@@ -254,6 +253,27 @@ class Repo2Docker(Application):
         config=True,
     )
 
+    platform = Unicode(
+        config=True,
+        help="""
+        Platform to build for, linux/amd64 (recommended) or linux/arm64 (experimental).
+        """,
+    )
+
+    @default("platform")
+    def _platform_default(self):
+        """
+        Default platform
+        """
+        p = get_platform()
+        if p == "linux/arm64":
+            warnings.warn(
+                "Building for linux/arm64 is experimental. "
+                "To use the recommended platform set --Repo2Docker.platform=linux/amd64. "
+                "To silence this warning set --Repo2Docker.platform=linux/arm64."
+            )
+        return p
+
     extra_build_args = Dict(
         {},
         help="""
@@ -308,7 +328,7 @@ class Repo2Docker(Application):
     )
 
     cleanup_checkout = Bool(
-        False,
+        True,
         help="""
         Delete source repository after building is done.
 
@@ -316,6 +336,12 @@ class Repo2Docker(Application):
         """,
         config=True,
     )
+
+    @default("cleanup_checkout")
+    def _defaut_cleanup_checkout(self):
+        # if the source exists locally we don't want to delete it at the end
+        # FIXME: Find a better way to figure out if repo is 'local'. Push this into ContentProvider?
+        return not os.path.exists(self.repo)
 
     output_image_spec = Unicode(
         "",
@@ -336,7 +362,7 @@ class Repo2Docker(Application):
     )
 
     run = Bool(
-        False,
+        True,
         help="""
         Run docker image after building
         """,
@@ -352,6 +378,12 @@ class Repo2Docker(Application):
         """,
         config=True,
     )
+
+    @observe("dry_run")
+    def _dry_run_changed(self, change):
+        if change.new:
+            # dry_run forces run and push to be False
+            self.push = self.run = False
 
     # FIXME: Refactor classes to separate build & run steps
     run_cmd = List(
@@ -427,9 +459,7 @@ class Repo2Docker(Application):
             entry = engines[self.engine]
         except KeyError:
             raise ContainerEngineException(
-                "Container engine '{}' not found. Available engines: {}".format(
-                    self.engine, ",".join(engines.keys())
-                )
+                f"Container engine '{self.engine}' not found. Available engines: {','.join(engines.keys())}"
             )
         engine_class = entry.load()
         return engine_class(parent=self)
@@ -449,16 +479,11 @@ class Repo2Docker(Application):
             spec = cp.detect(url, ref=ref)
             if spec is not None:
                 picked_content_provider = cp
-                self.log.info(
-                    "Picked {cp} content "
-                    "provider.\n".format(cp=cp.__class__.__name__)
-                )
+                self.log.info(f"Picked {cp.__class__.__name__} content provider.\n")
                 break
 
         if picked_content_provider is None:
-            self.log.error(
-                "No matching content provider found for " "{url}.".format(url=url)
-            )
+            self.log.error(f"No matching content provider found for {url}.")
 
         swh_token = self.config.get("swh_token", self.swh_token)
         if swh_token and isinstance(picked_content_provider, contentproviders.Swhid):
@@ -467,7 +492,7 @@ class Repo2Docker(Application):
         for log_line in picked_content_provider.fetch(
             spec, checkout_path, yield_output=self.json_logs
         ):
-            self.log.info(log_line, extra=dict(phase="fetching"))
+            self.log.info(log_line, extra=dict(phase=R2dState.FETCHING))
 
         if not self.output_image_spec:
             image_spec = "r2d" + self.repo
@@ -490,26 +515,25 @@ class Repo2Docker(Application):
         Avoids non-JSON output on errors when using --json-logs
         """
         self.log.error(
-            "Error during build: %s",
-            evalue,
+            f"Error during build: {evalue}",
             exc_info=(etype, evalue, traceback),
-            extra=dict(phase="failed"),
+            extra=dict(phase=R2dState.FAILED),
         )
 
     def initialize(self, *args, **kwargs):
         """Init repo2docker configuration before start"""
         # FIXME: Remove this function, move it to setters / traitlet reactors
+        self.log = logging.getLogger("repo2docker")
+        self.log.setLevel(self.log_level)
+        logHandler = logging.StreamHandler()
+        self.log.handlers = []
+        self.log.addHandler(logHandler)
         if self.json_logs:
             # register JSON excepthook to avoid non-JSON output on errors
             sys.excepthook = self.json_excepthook
             # Need to reset existing handlers, or we repeat messages
-            logHandler = logging.StreamHandler()
             formatter = jsonlogger.JsonFormatter()
             logHandler.setFormatter(formatter)
-            self.log = logging.getLogger("repo2docker")
-            self.log.handlers = []
-            self.log.addHandler(logHandler)
-            self.log.setLevel(self.log_level)
         else:
             # due to json logger stuff above,
             # our log messages include carriage returns, newlines, etc.
@@ -534,7 +558,7 @@ class Repo2Docker(Application):
         last_emit_time = time.time()
         for chunk in client.push(self.output_image_spec):
             if client.string_output:
-                self.log.info(chunk, extra=dict(phase="pushing"))
+                self.log.info(chunk, extra=dict(phase=R2dState.PUSHING))
                 continue
             # else this is Docker output
 
@@ -548,7 +572,7 @@ class Repo2Docker(Application):
                     self.log.warning("Not a JSON progress line: %r", line)
                     continue
                 if "error" in progress:
-                    self.log.error(progress["error"], extra=dict(phase="failed"))
+                    self.log.error(progress["error"], extra=dict(phase=R2dState.FAILED))
                     raise ImageLoadError(progress["error"])
                 if "id" not in progress:
                     continue
@@ -563,13 +587,15 @@ class Repo2Docker(Application):
                     self.log.info(
                         "Pushing image\n",
                         extra=dict(
-                            progress=progress_layers, layers=layers, phase="pushing"
+                            progress=progress_layers,
+                            layers=layers,
+                            phase=R2dState.PUSHING,
                         ),
                     )
                     last_emit_time = time.time()
         self.log.info(
-            "Successfully pushed {}".format(self.output_image_spec),
-            extra=dict(phase="pushing"),
+            f"Successfully pushed {self.output_image_spec}",
+            extra=dict(phase=R2dState.PUSHING),
         )
 
     def run_image(self):
@@ -595,31 +621,38 @@ class Repo2Docker(Application):
         self.hostname = host_name
 
         if not self.run_cmd:
-            port = str(self._get_free_port())
-            self.port = port
+            if len(self.ports) == 1:
+                # single port mapping specified
+                # retrieve container and host port from dict
+                # {'8888/tcp': ('hostname', 'port')}
+                # or
+                # {'8888/tcp': 'port'}
+                container_port_proto, host_port = next(iter(self.ports.items()))
+                if isinstance(host_port, tuple):
+                    # (hostname, port) tuple or string port
+                    host_name, host_port = host_port
+                    self.hostname = host_name
+                host_port = int(host_port)
+                container_port = int(container_port_proto.split("/", 1)[0])
+            else:
+                # no port specified, pick a random one
+                container_port = host_port = str(self._get_free_port())
+                self.ports = {f"{container_port}/tcp": host_port}
+            self.port = host_port
             # To use the option --NotebookApp.custom_display_url
             # make sure the base-notebook image is updated:
             # docker pull jupyter/base-notebook
             run_cmd = [
                 "jupyter",
                 "notebook",
-                "--ip",
-                "0.0.0.0",
-                "--port",
-                port,
-                "--NotebookApp.custom_display_url=http://{}:{}".format(host_name, port),
+                "--ip=0.0.0.0",
+                f"--port={container_port}",
+                f"--NotebookApp.custom_display_url=http://{host_name}:{host_port}",
                 "--NotebookApp.default_url=/lab",
             ]
-            ports = {"%s/tcp" % port: port}
         else:
             # run_cmd given by user, if port is also given then pass it on
             run_cmd = self.run_cmd
-            if self.ports:
-                ports = self.ports
-            else:
-                ports = {}
-        # store ports on self so they can be retrieved in tests
-        self.ports = ports
 
         container_volumes = {}
         if self.volumes:
@@ -634,7 +667,7 @@ class Repo2Docker(Application):
 
         run_kwargs = dict(
             publish_all_ports=self.all_ports,
-            ports=ports,
+            ports=self.ports,
             command=run_cmd,
             volumes=container_volumes,
             environment=self.environment,
@@ -661,24 +694,27 @@ class Repo2Docker(Application):
             for line in container.logs(stream=True, timestamps=True):
                 line = line.decode("utf-8")
                 last_timestamp, line = line.split(" ", maxsplit=1)
-                self.log.info(line, extra=dict(phase="running"))
+                self.log.info(line, extra=dict(phase=R2dState.RUNNING))
 
         finally:
             container.reload()
             if container.status == "running":
-                self.log.info("Stopping container...\n", extra=dict(phase="running"))
+                self.log.info(
+                    "Stopping container...\n", extra=dict(phase=R2dState.RUNNING)
+                )
                 container.kill()
             exit_code = container.exitcode
 
             container.wait()
 
             self.log.info(
-                "Container finished running.\n".upper(), extra=dict(phase="running")
+                "Container finished running.\n".upper(),
+                extra=dict(phase=R2dState.RUNNING),
             )
             # are there more logs? Let's send them back too
             late_logs = container.logs(since=last_timestamp).decode("utf-8")
             for line in late_logs.split("\n"):
-                self.log.debug(line + "\n", extra=dict(phase="running"))
+                self.log.debug(line + "\n", extra=dict(phase=R2dState.RUNNING))
 
             container.remove()
             if exit_code:
@@ -718,7 +754,7 @@ class Repo2Docker(Application):
             try:
                 docker_client = self.get_engine()
             except ContainerEngineException as e:
-                self.log.error("\nContainer engine initialization error: %s\n", e)
+                self.log.error(f"\nContainer engine initialization error: {e}\n")
                 self.exit(1)
 
         # If the source to be executed is a directory, continue using the
@@ -727,6 +763,8 @@ class Repo2Docker(Application):
         # making a copy of it as it might contain large files that would be
         # expensive to copy.
         if os.path.isdir(self.repo):
+            # never cleanup when we are working in a local repo
+            self.cleanup_checkout = False
             checkout_path = self.repo
         else:
             if self.git_workdir is None:
@@ -739,8 +777,7 @@ class Repo2Docker(Application):
 
             if self.find_image():
                 self.log.info(
-                    "Reusing existing image ({}), not "
-                    "building.".format(self.output_image_spec)
+                    f"Reusing existing image ({self.output_image_spec}), not building."
                 )
                 # no need to build, so skip to the end by `return`ing here
                 # this will still execute the finally clause and let's us
@@ -751,11 +788,10 @@ class Repo2Docker(Application):
                 checkout_path = os.path.join(checkout_path, self.subdir)
                 if not os.path.isdir(checkout_path):
                     self.log.error(
-                        "Subdirectory %s does not exist",
-                        self.subdir,
-                        extra=dict(phase="failure"),
+                        f"Subdirectory {self.subdir} does not exist",
+                        extra=dict(phase=R2dState.FAILED),
                     )
-                    raise FileNotFoundError("Could not find {}".format(checkout_path))
+                    raise FileNotFoundError(f"Could not find {checkout_path}")
 
             with chdir(checkout_path):
                 for BP in self.buildpacks:
@@ -766,6 +802,7 @@ class Repo2Docker(Application):
                 else:
                     picked_buildpack = self.default_buildpack()
 
+                picked_buildpack.platform = self.platform
                 picked_buildpack.appendix = self.appendix
                 # Add metadata labels
                 picked_buildpack.labels["repo2docker.version"] = self.version
@@ -788,7 +825,7 @@ class Repo2Docker(Application):
                 else:
                     self.log.debug(
                         picked_buildpack.render(build_args),
-                        extra=dict(phase="building"),
+                        extra=dict(phase=R2dState.BUILDING),
                     )
                     if self.user_id == 0:
                         raise ValueError(
@@ -796,9 +833,8 @@ class Repo2Docker(Application):
                         )
 
                     self.log.info(
-                        "Using %s builder\n",
-                        bp.__class__.__name__,
-                        extra=dict(phase="building"),
+                        f"Using {bp.__class__.__name__} builder\n",
+                        extra=dict(phase=R2dState.BUILDING),
                     )
 
                     for l in picked_buildpack.build(
@@ -808,24 +844,31 @@ class Repo2Docker(Application):
                         build_args,
                         self.cache_from,
                         self.extra_build_kwargs,
+                        platform=self.platform,
                     ):
                         if docker_client.string_output:
-                            self.log.info(l, extra=dict(phase="building"))
+                            self.log.info(l, extra=dict(phase=R2dState.BUILDING))
                         # else this is Docker output
                         elif "stream" in l:
-                            self.log.info(l["stream"], extra=dict(phase="building"))
+                            self.log.info(
+                                l["stream"], extra=dict(phase=R2dState.BUILDING)
+                            )
                         elif "error" in l:
-                            self.log.info(l["error"], extra=dict(phase="failure"))
+                            self.log.info(l["error"], extra=dict(phase=R2dState.FAILED))
                             raise BuildError(l["error"])
                         elif "status" in l:
                             self.log.info(
-                                "Fetching base image...\r", extra=dict(phase="building")
+                                "Fetching base image...\r",
+                                extra=dict(phase=R2dState.BUILDING),
                             )
                         else:
-                            self.log.info(json.dumps(l), extra=dict(phase="building"))
+                            self.log.info(
+                                json.dumps(l), extra=dict(phase=R2dState.BUILDING)
+                            )
 
         finally:
             # Cleanup checkout if necessary
+            # never cleanup when checking out a local repo
             if self.cleanup_checkout:
                 shutil.rmtree(checkout_path, ignore_errors=True)
 
