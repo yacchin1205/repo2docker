@@ -14,9 +14,9 @@ def rstudio_base_scripts(r_version):
     shiny_proxy_version = "1.1"
     shiny_sha256sum = "80f1e48f6c824be7ef9c843bb7911d4981ac7e8a963e0eff823936a8b28476ee"
 
-    rstudio_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2022.02.1-461-amd64.deb"
+    rstudio_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2022.12.0-353-amd64.deb"
     rstudio_sha256sum = (
-        "239e8d93e103872e7c6d827113d88871965f82ffb0397f5638025100520d8a54"
+        "bb88e37328c304881e60d6205d7dac145525a5c2aaaf9da26f1cb625b7d47e6e"
     )
     rsession_proxy_version = "2.0.1"
 
