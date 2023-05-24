@@ -77,8 +77,11 @@ def main():
     def tee(chunk):
         """Tee output from child to both our stdout and the log file"""
         for f in [sys.stdout.buffer, log_file]:
-            f.write(chunk)
-            f.flush()
+            try:
+                f.write(chunk)
+                f.flush()
+            except OSError:
+                pass
 
     # make stdout pipe non-blocking
     # this means child.stdout.read(nbytes)
