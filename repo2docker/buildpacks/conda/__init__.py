@@ -425,7 +425,7 @@ class CondaBuildPack(BaseImage):
 
         installR_path = self.binder_path("install.R")
         if os.path.exists(installR_path):
-            repo_url = 'https://cran.microsoft.com/'
+            repo_url = 'https://cran.ism.ac.jp/'
             scripts += [
                 (
                     "${NB_USER}",
