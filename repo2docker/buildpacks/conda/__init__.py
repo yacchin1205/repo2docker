@@ -445,13 +445,20 @@ class CondaBuildPack(BaseImage):
             "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.1.0"
         )
         grdm_jlab_release_tag = "0.1.0"
+        jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
+        jupyter_resource_usage_tag = "main"
         jlab_ext_scripts = f"""
-pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
+pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz 
+pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
 jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
 jupyter nbextension install --py rdm_binderhub_jlabextension --user
 jupyter nbextension enable --py rdm_binderhub_jlabextension --user
+jupyter labextension enable jupyter_resource_usage
+jupyter serverextension enable --py jupyter_resource_usage
+jupyter nbextension install --py jupyter_resource_usage --user
+jupyter nbextension enable --py jupyter_resource_usage --user
 jlpm cache clean
 npm cache clean --force
 pip3 cache purge
