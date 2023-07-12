@@ -442,13 +442,13 @@ class CondaBuildPack(BaseImage):
 
     def get_custom_extension_script(self, post):
         grdm_jlab_release_url = (
-            "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.1.0"
+            "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.2.0"
         )
-        grdm_jlab_release_tag = "0.1.0"
+        grdm_jlab_release_tag = "0.2.0"
         jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
         jupyter_resource_usage_tag = "main"
         jlab_ext_scripts = f"""
-pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz 
+pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
 pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
 jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
 jupyter labextension enable rdm-binderhub-jlabextension
