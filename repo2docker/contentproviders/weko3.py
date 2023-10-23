@@ -148,6 +148,7 @@ class WEKO3(ContentProvider):
     def urlopen(self, req, headers=None):
         """A urlopen() helper"""
         req.add_header("User-Agent", "repo2docker {}".format(__version__))
+        req.add_header("Accept", "*/*")
         if headers is not None:
             for key, value in headers.items():
                 req.add_header(key, value)
