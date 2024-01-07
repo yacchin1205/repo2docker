@@ -63,6 +63,7 @@ setup(
         "toml",
         "traitlets",
         "beautifulsoup4>=4.10.0",
+        "rocrate>=0.9.0",
     ],
     python_requires=">=3.6",
     author="Project Jupyter Contributors",

@@ -8,3 +8,4 @@ from .swhid import Swhid
 from .rdm import RDM
 from .weko3 import WEKO3
 from .zenodo import Zenodo
+from .crate import Crate

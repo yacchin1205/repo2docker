@@ -146,6 +146,7 @@ class Repo2Docker(Application):
     content_providers = List(
         [
             contentproviders.Local,
+            contentproviders.Crate,
             contentproviders.RDM,
             contentproviders.WEKO3,
             contentproviders.Zenodo,

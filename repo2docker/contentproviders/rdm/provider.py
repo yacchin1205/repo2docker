@@ -5,10 +5,12 @@ import shutil
 import uuid
 
 from urllib.parse import urlparse
+from rocrate.rocrate import ROCrate
 
-from .base import ContentProvider
+from ..base import ContentProvider
+from ..crate.util import write_json
 
-from osfclient.api import OSF
+from .api import OSF
 from osfclient.utils import is_path_matched
 
 
@@ -50,6 +52,9 @@ class RDM(ContentProvider):
                 path = u.path[1:] if u.path.startswith("/") else u.path
                 if "/" in path:
                     self.project_id, self.path = path.split("/", 1)
+                    if self.path.startswith("files/dir/"):
+                        # URL for folder is like https://test.some.host.nii.ac.jp/123456/files/dir/abc/def
+                        self.path = self.path[len("files/dir/") :]
                     if self.path.startswith("files/"):
                         self.path = self.path[len("files/") :]
                 else:
@@ -85,17 +90,23 @@ class RDM(ContentProvider):
         )
         project = osf.project(project_id)
 
+        crate_files = []
         if len(path):
             storage = project.storage(path[: path.index("/")] if "/" in path else path)
             subpath = path[path.index("/") :] if "/" in path else "/"
-            for line in self._fetch_storage(storage, output_dir, subpath):
+            for line in self._fetch_storage(storage, output_dir, subpath, crate_files=crate_files):
                 yield line
         else:
             for storage in project.storages:
-                for line in self._fetch_storage(storage, output_dir):
+                for line in self._fetch_storage(storage, output_dir, crate_files=crate_files):
                     yield line
+        crate = ROCrate()
+        for abspath, relpath, crate_file in crate_files:
+            crate_file.add_to_crate(abspath, relpath, host, crate)
+        crate_path = os.path.join(output_dir, ".run-crate-metadata.json")
+        write_json(crate, crate_path)
 
-    def _fetch_storage(self, storage, output_dir, path=None):
+    def _fetch_storage(self, storage, output_dir, path=None, crate_files=None):
         if path is None:
             path_filter = None
         elif path == "/":
@@ -117,6 +128,8 @@ class RDM(ContentProvider):
                 os.makedirs(local_dir)
             with open(local_full_path, "wb") as f:
                 file_.write_to(f)
+            if crate_files is not None:
+                crate_files.append((local_full_path, local_path, file_))
             yield "Fetch: {} ({} to {})".format(file_.path, local_path, output_dir)
 
     @property
