@@ -459,7 +459,6 @@ jupyter labextension enable jupyter_resource_usage
 jupyter serverextension enable --py jupyter_resource_usage
 jupyter nbextension install --py jupyter_resource_usage --user
 jupyter nbextension enable --py jupyter_resource_usage --user
-jlpm cache clean
 npm cache clean --force
 pip3 cache purge
 """
