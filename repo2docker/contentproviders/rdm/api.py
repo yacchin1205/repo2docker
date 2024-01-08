@@ -110,6 +110,12 @@ class Storage(OriginalStorage):
         return self._iter_children(self._files_url, 'file', File,
                                    self._files_key, target_filter)
 
+    def get_file(self, path):
+        path = path.lstrip('/')
+        url = urljoin(self._files_url, path)
+        file = self._json(self._get(url), 200)
+        return File(file['data'], self.session)
+
 class Project(OriginalProject):
     def storage(self, provider='osfstorage'):
         """Return storage `provider`."""

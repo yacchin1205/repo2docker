@@ -13,11 +13,6 @@ from repo2docker.contentproviders.rdm.api import OSF
 logger = logging.getLogger(__name__)
 
 
-def is_wb_path_matched(path, file):
-    file_path = file["attributes"]["path"]
-    return path == file_path
-
-
 class RDMCrateFetcher(CrateFetcher):
     """Loader for RDM crates"""
 
@@ -117,8 +112,5 @@ class RDMCrateFetcher(CrateFetcher):
         )
         project = osf.project(project_id)
         storage = project.storage(provider)
-        path_filter = lambda f: is_wb_path_matched(path, f)
-        files = list(storage.matched_files(path_filter))
-        if len(files) != 1:
-            raise ValueError("Crate file not found: {}".format(url))
-        return files[0]
+        file = storage.get_file(path)
+        return file
