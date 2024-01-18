@@ -8,6 +8,8 @@ from osfclient.models import Storage as OriginalStorage
 from osfclient.models import File as OriginalFile
 from osfclient.models.file import copyfileobj
 from osfclient.exceptions import OSFException, UnauthorizedException
+from rocrate.model import Person
+from rocrate.model.contextentity import ContextEntity
 
 
 logger = logging.getLogger(__name__)
@@ -117,6 +119,17 @@ class Storage(OriginalStorage):
         return File(file['data'], self.session)
 
 class Project(OriginalProject):
+    institutions = {}
+
+    def _update_attributes(self, project):
+        super()._update_attributes(project)
+        if not project:
+            return
+        project = project['data']
+        self.category = self._get_attribute(project, 'attributes', 'category')
+        self._creator_url = self._get_attribute(project, 'relationships', 'creator', 'links', 'related', 'href')
+        self._contributors_url = self._get_attribute(project, 'relationships', 'contributors', 'links', 'related', 'href')
+
     def storage(self, provider='osfstorage'):
         """Return storage `provider`."""
         stores = self._json(self._get(self._storages_url), 200)
@@ -128,6 +141,134 @@ class Project(OriginalProject):
 
         raise RuntimeError("Project has no storage "
                            "provider '{}'".format(provider))
+
+    def add_to_crate(self, crate, node_ids=None, user_ids=None, institution_ids=None):
+        if self.id not in node_ids:
+            node_id = f'#node.{len(node_ids)}'
+            node_ids[self.id] = node_id
+        else:
+            node_id = node_ids[self.id]
+        creator_entity = self._add_creator_to_crate(
+            crate,
+            user_ids=user_ids,
+            institution_ids=institution_ids,
+        )
+        contributor_entities = self._add_contributors_to_crate(
+            crate,
+            user_ids=user_ids,
+            institution_ids=institution_ids,
+        )
+        crate.add(ContextEntity(crate, node_id, properties={
+            '@type': 'RDMProject',
+            'about': {
+                '@id': './',
+            },
+            'name': self.title,
+            'description': self.description,
+            'category': self.category,
+            'dateCreated': self.date_created,
+            'dateModified': self.date_modified,
+            'creator': {
+                '@id': creator_entity.id,
+            },
+            'contributor': [
+                {
+                    '@id': entity.id,
+                }
+                for entity in contributor_entities
+            ],
+        }))
+
+    def _add_creator_to_crate(self, crate, user_ids=None, institution_ids=None):
+        creator = self._json(self._get(self._creator_url), 200)
+        self.creator = self._get_attribute(creator, 'data', 'id')
+        return self._add_user_to_crate(
+            creator,
+            crate,
+            user_ids=user_ids,
+            institution_ids=institution_ids,
+        )
+
+    def _add_user_to_crate(self, user, crate, user_ids=None, institution_ids=None):
+        if user['data']['id'] not in user_ids:
+            user_id = f'#user.{len(user_ids)}'
+            user_ids[user['data']['id']] = user_id
+        else:
+            user_id = user_ids[user['data']['id']]
+        institution_url = self._get_attribute(user, 'data', 'relationships', 'institutions', 'links', 'related', 'href', default=None)
+        institution = None
+        if institution_url is not None:
+            institution = self._add_institution_to_crate(
+                institution_url,
+                crate,
+                institution_ids=institution_ids,
+            )
+        props = {
+            '@type': 'Person',
+            'name': user['data']['attributes']['full_name'],
+            'givenName': [
+                {
+                    '@value': user['data']['attributes']['given_name'],
+                    '@language': 'en',
+                }
+            ],
+            'middleNames': [
+                {
+                    '@value': user['data']['attributes']['middle_names'],
+                    '@language': 'en',
+                }
+            ],
+            'familyName': [
+                {
+                    '@value': user['data']['attributes']['family_name'],
+                    '@language': 'en',
+                }
+            ],
+        }
+        if institution is not None:
+            props['affiliation'] = {
+                '@id': institution.id,
+            }
+        person = Person(crate, user_id, properties=props)
+        crate.add(person)
+        return person
+
+    def _add_contributors_to_crate(self, crate, user_ids=None, institution_ids=None):
+        contributors = self._json(self._get(self._contributors_url), 200)
+        return [
+            self._add_user_to_crate(
+                contributor['embeds']['users'],
+                crate,
+                user_ids=user_ids,
+                institution_ids=institution_ids,
+            )
+            for contributor in contributors['data']
+            if contributor['embeds']['users']['data']['id'] != self.creator
+        ]
+
+    def _add_institution_to_crate(self, institution_url, crate, institution_ids=None):
+        if institution_url not in self.institutions:
+            institution = self._json(self._get(institution_url), 200)['data']
+            self.institutions[institution_url] = institution
+        else:
+            institution = self.institutions[institution_url]
+        if len(institution) == 0:
+            return None
+        institution = institution[0]
+        if institution['id'] not in institution_ids:
+            institution_id = f'#institution.{len(institution_ids)}'
+            institution_ids[institution['id']] = institution_id
+        else:
+            institution_id = institution_ids[institution['id']]
+        organization = ContextEntity(crate, institution_id, properties={
+            '@type': 'Organization',
+            'name': [{
+                '@value': institution['attributes']['name'],
+                '@language': 'ja',
+            }],
+        })
+        crate.add(organization)
+        return organization
 
 class OSF(OriginalOSF):
     def project(self, project_id):

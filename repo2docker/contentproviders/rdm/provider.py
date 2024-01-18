@@ -101,6 +101,14 @@ class RDM(ContentProvider):
                 for line in self._fetch_storage(storage, output_dir, crate_files=crate_files):
                     yield line
         crate = ROCrate()
+        crate.metadata.extra_contexts += [
+            'https://w3id.org/ro/terms/workflow-run',
+            'https://purl.org/gakunin-rdm/project/0.1',
+        ]
+        node_ids = {}
+        user_ids = {}
+        institution_ids = {}
+        project.add_to_crate(crate, node_ids=node_ids, user_ids=user_ids, institution_ids=institution_ids)
         for abspath, relpath, crate_file in crate_files:
             crate_file.add_to_crate(abspath, relpath, host, crate)
         crate_path = os.path.join(output_dir, ".run-crate-metadata.json")
