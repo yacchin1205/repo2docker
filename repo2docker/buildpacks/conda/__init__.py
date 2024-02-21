@@ -101,6 +101,7 @@ class CondaBuildPack(BaseImage):
     def get_env(self):
         """Make kernel env the default for `conda install`"""
         env = super().get_env() + [("CONDA_DEFAULT_ENV", "${KERNEL_PYTHON_PREFIX}")]
+        env += self._get_env_for_matlab()
         return env
 
     @lru_cache()
@@ -495,12 +496,17 @@ class CondaBuildPack(BaseImage):
             )
         ]
 
-    def _get_assemble_scripts_for_matlab(self):
+    def _get_matlab_yaml(self):
         install_matlab_path = self.binder_path("mpm.yml")
         if not os.path.exists(install_matlab_path):
-            return []
+            return None
         with open(install_matlab_path) as f:
-            config = YAML().load(f)
+            return YAML().load(f)
+
+    def _get_assemble_scripts_for_matlab(self):
+        config = self._get_matlab_yaml()
+        if config is None:
+            return []
         if "release" not in config:
             raise ValueError("mpm.yml must contain a 'release' field")
         scripts = matlab_requirements_scripts(config["release"], self.base_image)
@@ -509,6 +515,12 @@ class CondaBuildPack(BaseImage):
         scripts += matlab_python_engine_installation_scripts(config["release"], matlab_dir)
         scripts += matlab_proxy_installation_scripts()
         return scripts
+
+    def _get_env_for_matlab(self):
+        config = self._get_matlab_yaml()
+        if config is None:
+            return []
+        return [("MW_CONTEXT_TAGS", "MATLAB_PROXY:JUPYTER:MPM:V1")]
 
     def get_custom_extension_script(self, post):
         grdm_jlab_release_url = (
