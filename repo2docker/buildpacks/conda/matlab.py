@@ -62,3 +62,8 @@ def matlab_python_engine_installation_scripts(release, dest_dir):
     && cd {dest_dir}/extern/engines/python \
     && python setup.py install || true"""
     return [("root", script)]
+
+def matlab_proxy_installation_scripts():
+    return [
+        ("${NB_USER}", "python -m pip install jupyter-matlab-proxy"),
+    ]

@@ -16,6 +16,7 @@ from .matlab import (
     matlab_requirements_scripts,
     matlab_installation_scripts,
     matlab_python_engine_installation_scripts,
+    matlab_proxy_installation_scripts,
 )
 
 # pattern for parsing conda dependency line
@@ -506,6 +507,7 @@ class CondaBuildPack(BaseImage):
         matlab_dir = "/opt/matlab"
         scripts += matlab_installation_scripts(config["release"], config.get("products", []), matlab_dir)
         scripts += matlab_python_engine_installation_scripts(config["release"], matlab_dir)
+        scripts += matlab_proxy_installation_scripts()
         return scripts
 
     def get_custom_extension_script(self, post):
