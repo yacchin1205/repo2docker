@@ -12,6 +12,12 @@ from ...semver import parse_version as V
 from ...utils import is_local_pip_requirement
 from .._r_base import rstudio_base_scripts
 from ..base import BaseImage
+from .matlab import (
+    matlab_requirements_scripts,
+    matlab_installation_scripts,
+    matlab_python_engine_installation_scripts,
+    matlab_proxy_installation_scripts,
+)
 
 # pattern for parsing conda dependency line
 PYTHON_REGEX = re.compile(r"python\s*=+\s*([\d\.]*)")
@@ -95,6 +101,7 @@ class CondaBuildPack(BaseImage):
     def get_env(self):
         """Make kernel env the default for `conda install`"""
         env = super().get_env() + [("CONDA_DEFAULT_ENV", "${KERNEL_PYTHON_PREFIX}")]
+        env += self._get_env_for_matlab()
         return env
 
     @lru_cache()
@@ -468,23 +475,52 @@ class CondaBuildPack(BaseImage):
         scripts = super().get_assemble_scripts()
         if not self._should_preassemble_env:
             scripts.extend(self.get_env_scripts())
-
-        installR_path = self.binder_path("install.R")
-        if os.path.exists(installR_path):
-            repo_url = 'https://cran.ism.ac.jp/'
-            scripts += [
-                (
-                    "${NB_USER}",
-                    # Delete any downloaded packages in /tmp, as they aren't reused by R
-                    f"""echo 'r = getOption("repos")' > /tmp/install.R && \
-                    echo 'r["CRAN"] = "{repo_url}"' >> /tmp/install.R && \
-                    echo 'options(repos = r)' >> /tmp/install.R && \
-                    cat {installR_path} >> /tmp/install.R && \
-                    Rscript /tmp/install.R && rm -rf /tmp/downloaded_packages""",
-                )
-            ]
-
+        scripts += self._get_assemble_scripts_for_r()
+        scripts += self._get_assemble_scripts_for_matlab()
         return scripts
+
+    def _get_assemble_scripts_for_r(self):
+        installR_path = self.binder_path("install.R")
+        if not os.path.exists(installR_path):
+            return []
+        repo_url = 'https://cran.ism.ac.jp/'
+        return [
+            (
+                "${NB_USER}",
+                # Delete any downloaded packages in /tmp, as they aren't reused by R
+                f"""echo 'r = getOption("repos")' > /tmp/install.R && \
+                echo 'r["CRAN"] = "{repo_url}"' >> /tmp/install.R && \
+                echo 'options(repos = r)' >> /tmp/install.R && \
+                cat {installR_path} >> /tmp/install.R && \
+                Rscript /tmp/install.R && rm -rf /tmp/downloaded_packages""",
+            )
+        ]
+
+    def _get_matlab_yaml(self):
+        install_matlab_path = self.binder_path("mpm.yml")
+        if not os.path.exists(install_matlab_path):
+            return None
+        with open(install_matlab_path) as f:
+            return YAML().load(f)
+
+    def _get_assemble_scripts_for_matlab(self):
+        config = self._get_matlab_yaml()
+        if config is None:
+            return []
+        if "release" not in config:
+            raise ValueError("mpm.yml must contain a 'release' field")
+        scripts = matlab_requirements_scripts(config["release"], self.base_image)
+        matlab_dir = "/opt/matlab"
+        scripts += matlab_installation_scripts(config["release"], config.get("products", []), matlab_dir)
+        scripts += matlab_python_engine_installation_scripts(config["release"], matlab_dir)
+        scripts += matlab_proxy_installation_scripts()
+        return scripts
+
+    def _get_env_for_matlab(self):
+        config = self._get_matlab_yaml()
+        if config is None:
+            return []
+        return [("MW_CONTEXT_TAGS", "MATLAB_PROXY:JUPYTER:MPM:V1")]
 
     def _get_jlab_extension_script(
         self, grdm_jlab_release_tag, grdm_jlab_filename_body, jupyter_resource_usage_tag,
