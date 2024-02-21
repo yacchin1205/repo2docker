@@ -1,12 +1,17 @@
 import datetime
 import os
 import re
+from functools import lru_cache
 
 import requests
 
 from ..semver import parse_version as V
 from ._r_base import rstudio_base_scripts
 from .python import PythonBuildPack
+
+# Aproximately the first snapshot on RSPM (Posit package manager)
+# that seems to have a working IRKernel.
+RSPM_CUTOFF_DATE = datetime.date(2018, 12, 7)
 
 
 class RBuildPack(PythonBuildPack):
@@ -21,8 +26,7 @@ class RBuildPack(PythonBuildPack):
 
        Where 'year', 'month' and 'date' refer to a specific
        date whose CRAN snapshot we will use to fetch packages.
-       Uses https://packagemanager.rstudio.com, or MRAN if no snapshot
-       is found on packagemanager.rstudio.com
+       Uses https://packagemanager.posit.co.
 
     2. A `DESCRIPTION` file signaling an R package
 
@@ -142,6 +146,7 @@ class RBuildPack(PythonBuildPack):
                 self._runtime = f"r-{str(self._checkpoint_date)}"
             return True
 
+    @lru_cache()
     def get_env(self):
         """
         Set custom env vars needed for RStudio to load
@@ -156,6 +161,7 @@ class RBuildPack(PythonBuildPack):
             ("LD_LIBRARY_PATH", "${R_HOME}/lib:${LD_LIBRARY_PATH}"),
         ]
 
+    @lru_cache()
     def get_path(self):
         """
         Return paths to be added to the PATH environment variable.
@@ -165,6 +171,7 @@ class RBuildPack(PythonBuildPack):
         """
         return super().get_path() + ["/usr/lib/rstudio-server/bin/"]
 
+    @lru_cache()
     def get_build_env(self):
         """
         Return environment variables to be set.
@@ -178,6 +185,7 @@ class RBuildPack(PythonBuildPack):
             ("R_LIBS_USER", "${APP_BASE}/rlibs")
         ]
 
+    @lru_cache()
     def get_packages(self):
         """
         Return list of packages to be installed.
@@ -191,14 +199,16 @@ class RBuildPack(PythonBuildPack):
             "libapparmor1",
             "sudo",
             "lsb-release",
+            "libssl-dev",
         ]
 
         return super().get_packages().union(packages)
 
+    @lru_cache()
     def get_rspm_snapshot_url(self, snapshot_date, max_days_prior=7):
         for i in range(max_days_prior):
             snapshots = requests.post(
-                "https://packagemanager.rstudio.com/__api__/url",
+                "https://packagemanager.posit.co/__api__/url",
                 # Ask for midnight UTC snapshot
                 json={
                     "repo": "all",
@@ -210,38 +220,19 @@ class RBuildPack(PythonBuildPack):
             # Construct a snapshot URL that will give us binary packages for Ubuntu Bionic (18.04)
             if "upsi" in snapshots:
                 return (
-                    "https://packagemanager.rstudio.com/all/__linux__/bionic/"
+                    # Env variables here are expanded by envsubst in the Dockerfile, after sourcing
+                    # /etc/os-release. This allows us to use distro specific variables here to get
+                    # appropriate binary packages without having to hard code version names here.
+                    "https://packagemanager.posit.co/all/__linux__/${VERSION_CODENAME}/"
                     + snapshots["upsi"]
                 )
         raise ValueError(
-            "No snapshot found for {} or {} days prior in packagemanager.rstudio.com".format(
+            "No snapshot found for {} or {} days prior in packagemanager.posit.co".format(
                 snapshot_date.strftime("%Y-%m-%d"), max_days_prior
             )
         )
 
-    def get_mran_snapshot_url(self, snapshot_date, max_days_prior=7):
-        for i in range(max_days_prior):
-            try_date = snapshot_date - datetime.timedelta(days=i)
-            # Fall back to MRAN if packagemanager.rstudio.com doesn't have it
-            url = f"https://mran.microsoft.com/snapshot/{try_date.isoformat()}"
-            r = requests.head(url)
-            if r.ok:
-                return url
-        raise ValueError(
-            "No snapshot found for {} or {} days prior in mran.microsoft.com".format(
-                snapshot_date.strftime("%Y-%m-%d"), max_days_prior
-            )
-        )
-
-    def get_cran_mirror_url(self, snapshot_date):
-        # Date after which we will use rspm + binary packages instead of MRAN + source packages
-        rspm_cutoff_date = datetime.date(2022, 1, 1)
-
-        if snapshot_date >= rspm_cutoff_date or self.r_version >= V("4.1"):
-            return self.get_rspm_snapshot_url(snapshot_date)
-        else:
-            return self.get_mran_snapshot_url(snapshot_date)
-
+    @lru_cache()
     def get_devtools_snapshot_url(self):
         """
         Return url of snapshot to use for getting devtools install
@@ -249,12 +240,16 @@ class RBuildPack(PythonBuildPack):
         devtools is part of our 'core' base install, so we should have some
         control over what version we install here.
         """
-        # Picked from https://packagemanager.rstudio.com/client/#/repos/1/overview
+        # Picked from https://packagemanager.posit.co/client/#/repos/1/overview
         # Hardcoded rather than dynamically determined from a date to avoid extra API calls
-        # Plus, we can always use packagemanager.rstudio.com here as we always install the
+        # Plus, we can always use packagemanager.posit.co here as we always install the
         # necessary apt packages.
-        return "https://packagemanager.rstudio.com/all/__linux__/bionic/2022-01-04+Y3JhbiwyOjQ1MjYyMTU7NzlBRkJEMzg"
+        # Env variables here are expanded by envsubst in the Dockerfile, after sourcing
+        # /etc/os-release. This allows us to use distro specific variables here to get
+        # appropriate binary packages without having to hard code version names here.
+        return "https://packagemanager.posit.co/all/__linux__/${VERSION_CODENAME}/2022-06-03+Y3JhbiwyOjQ1MjYyMTU7RkM5ODcwN0M"
 
+    @lru_cache()
     def get_build_scripts(self):
         """
         Return series of build-steps common to all R repositories
@@ -274,8 +269,14 @@ class RBuildPack(PythonBuildPack):
         We set the snapshot date used to install R libraries from based on the
         contents of runtime.txt.
         """
+        if self.checkpoint_date < RSPM_CUTOFF_DATE:
+            raise RuntimeError(
+                f'Microsoft killed MRAN, the source of R package snapshots before {RSPM_CUTOFF_DATE.strftime("%Y-%m-%d")}. '
+                f'This repo has a snapshot date of {self.checkpoint_date.strftime("%Y-%m-%d")} specified in runtime.txt. '
+                "Please use a newer snapshot date"
+            )
 
-        cran_mirror_url = self.get_cran_mirror_url(self.checkpoint_date)
+        cran_mirror_url = self.get_rspm_snapshot_url(self.checkpoint_date)
 
         if self.platform != "linux/amd64":
             raise RuntimeError(
@@ -333,22 +334,25 @@ class RBuildPack(PythonBuildPack):
                 rf"""
                 R RHOME && \
                 mkdir -p /etc/rstudio && \
-                echo 'options(repos = c(CRAN = "{cran_mirror_url}"))' > /opt/R/{self.r_version}/lib/R/etc/Rprofile.site && \
-                echo 'r-cran-repos={cran_mirror_url}' > /etc/rstudio/rsession.conf
+                EXPANDED_CRAN_MIRROR_URL="$(. /etc/os-release && echo {cran_mirror_url} | envsubst)" && \
+                echo "options(repos = c(CRAN = \"${{EXPANDED_CRAN_MIRROR_URL}}\"))" > /opt/R/{self.r_version}/lib/R/etc/Rprofile.site && \
+                echo "r-cran-repos=${{EXPANDED_CRAN_MIRROR_URL}}" > /etc/rstudio/rsession.conf
                 """,
             ),
             (
                 "${NB_USER}",
                 # Install a pinned version of devtools, IRKernel and shiny
                 rf"""
-                R --quiet -e "install.packages(c('devtools', 'IRkernel', 'shiny'), repos='{self.get_devtools_snapshot_url()}')" && \
-                R --quiet -e "IRkernel::installspec(prefix='$NB_PYTHON_PREFIX')"
+                export EXPANDED_CRAN_MIRROR_URL="$(. /etc/os-release && echo {cran_mirror_url} | envsubst)" && \
+                R --quiet -e "install.packages(c('devtools', 'IRkernel', 'shiny'), repos=Sys.getenv(\"EXPANDED_CRAN_MIRROR_URL\"))" && \
+                R --quiet -e "IRkernel::installspec(prefix=Sys.getenv(\"NB_PYTHON_PREFIX\"))"
                 """,
             ),
         ]
 
         return super().get_build_scripts() + scripts
 
+    @lru_cache()
     def get_preassemble_script_files(self):
         files = super().get_preassemble_script_files()
         installR_path = self.binder_path("install.R")
@@ -357,6 +361,7 @@ class RBuildPack(PythonBuildPack):
 
         return files
 
+    @lru_cache()
     def get_preassemble_scripts(self):
         """Install contents of install.R
 
@@ -382,6 +387,7 @@ class RBuildPack(PythonBuildPack):
 
         return super().get_preassemble_scripts() + scripts
 
+    @lru_cache()
     def get_assemble_scripts(self):
         """Install the dependencies of or the repository itself"""
         assemble_scripts = super().get_assemble_scripts()
