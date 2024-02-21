@@ -217,7 +217,7 @@ class RBuildPack(PythonBuildPack):
                     ),
                 },
             ).json()
-            # Construct a snapshot URL that will give us binary packages for Ubuntu Bionic (18.04)
+            # Construct a snapshot URL that will give us binary packages for appropriate ubuntu version
             if "upsi" in snapshots:
                 return (
                     # Env variables here are expanded by envsubst in the Dockerfile, after sourcing
@@ -337,6 +337,15 @@ class RBuildPack(PythonBuildPack):
                 EXPANDED_CRAN_MIRROR_URL="$(. /etc/os-release && echo {cran_mirror_url} | envsubst)" && \
                 echo "options(repos = c(CRAN = \"${{EXPANDED_CRAN_MIRROR_URL}}\"))" > /opt/R/{self.r_version}/lib/R/etc/Rprofile.site && \
                 echo "r-cran-repos=${{EXPANDED_CRAN_MIRROR_URL}}" > /etc/rstudio/rsession.conf
+                """,
+            ),
+            (
+                "root",
+                # Configure log-level and send to stderr
+                # Set log-level=debug to investigate problems
+                # https://docs.posit.co/ide/server-pro/server_management/logging.html
+                rf"""
+                printf '[*]\nlog-level=info\nlogger-type=stderr\n' > /etc/rstudio/logging.conf
                 """,
             ),
             (

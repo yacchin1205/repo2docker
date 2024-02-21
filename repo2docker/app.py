@@ -7,6 +7,7 @@ Usage:
 
     python -m repo2docker https://github.com/you/your-repo
 """
+
 import getpass
 import json
 import logging
@@ -450,7 +451,7 @@ class Repo2Docker(Application):
     )
 
     base_image = Unicode(
-        "docker.io/library/buildpack-deps:bionic",
+        "docker.io/library/buildpack-deps:jammy",
         config=True,
         help="""
         Base image to use when building docker images.
