@@ -20,14 +20,12 @@ def rstudio_base_scripts(r_version):
     # check for the dependency itself directly in the code below. You can find these URLs in
     # https://posit.co/download/rstudio-server/, toggling between Ubuntu 22 (for openssl3) vs earlier versions (openssl 1.1)
     # you may forget about openssl, but openssl never forgets you.
-    rstudio_openssl3_url = "https://download2.rstudio.org/server/jammy/amd64/rstudio-server-2022.12.0-353-amd64.deb"
-    rstudio_openssl3_sha256sum = (
-        "a5aa2202786f9017a6de368a410488ea2e4fc6c739f78998977af214df0d6288"
-    )
 
-    rstudio_openssl1_url = "https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2022.12.0-353-amd64.deb"
-    rstudio_openssl1_sha256sum = (
-        "bb88e37328c304881e60d6205d7dac145525a5c2aaaf9da26f1cb625b7d47e6e"
+    # RStudio server 2023.12.1 seems to be provided for only Ubuntu 20.04 and later
+    # and it does not work with Ubuntu 18.04(bionic)
+    rstudio_url = "https://download2.rstudio.org/server/jammy/amd64/rstudio-server-2023.12.1-402-amd64.deb"
+    rstudio_sha256sum = (
+        "2ceeebe5d1d77068b36e85f7cf366cd1409f7642a80261b6bbeb3da945ef0888"
     )
     rsession_proxy_version = "2.2.0"
 
@@ -39,13 +37,8 @@ def rstudio_base_scripts(r_version):
             # which will upgrade the installed version of R, undoing our pinned version
             rf"""
             apt-get update > /dev/null && \
-            if apt-cache search libssl3 | grep -q libssl3; then \
-              RSTUDIO_URL="{rstudio_openssl3_url}" ;\
-              RSTUDIO_HASH="{rstudio_openssl3_sha256sum}" ;\
-            else \
-              RSTUDIO_URL="{rstudio_openssl1_url}" ;\
-              RSTUDIO_HASH="{rstudio_openssl1_sha256sum}" ;\
-            fi && \
+            RSTUDIO_URL="{rstudio_url}" && \
+            RSTUDIO_HASH="{rstudio_sha256sum}"  && \
             curl --silent --location --fail ${{RSTUDIO_URL}} > /tmp/rstudio.deb && \
             curl --silent --location --fail {shiny_server_url} > /tmp/shiny.deb && \
             echo "${{RSTUDIO_HASH}} /tmp/rstudio.deb" | sha256sum -c - && \
