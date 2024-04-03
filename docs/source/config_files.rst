@@ -43,8 +43,8 @@ specified in your ``environment.yml``.
 You can also specify which Python version to install in your built environment
 with ``environment.yml``. By default, ``repo2docker`` installs
 |default_python| with your ``environment.yml`` unless you include the version of
-Python in this file.  ``conda`` supports all versions of Python,
-though ``repo2docker`` support is best with Python 3.7, 3.6, 3.5 and 2.7.
+Python in this file.  ``conda`` Should support all versions of Python,
+though ``repo2docker`` support is best with Python 3.7-3.11.
 
 .. warning::
    If you include a Python version in a ``runtime.txt`` file in addition to your
@@ -118,7 +118,7 @@ with ``REQUIRE`` and ``environment.yml``, visit
 ================================================
 
 This is used to install R libraries pinned to a specific snapshot on
-`MRAN <https://mran.microsoft.com/documents/rro/reproducibility>`_.
+`Posit Package Manager <https://packagemanager.posit.co/>`_.
 To set the date of the snapshot add a runtime.txt_.
 For an example ``install.R`` file, visit our `example install.R file <https://github.com/binder-examples/r/blob/HEAD/install.R>`_.
 
@@ -162,8 +162,8 @@ Note that by default the build will not be stopped if an error occurs inside a s
 You should include ``set -e`` or the equivalent at the start of the script to avoid errors being silently ignored.
 
 An example use-case of ``postBuild`` file is JupyterLab's demo on mybinder.org.
-It uses a ``postBuild`` file in a folder called ``binder`` to `prepare
-their demo for binder <https://github.com/jupyterlab/jupyterlab-demo/blob/HEAD/binder/postBuild>`_.
+It uses a ``postBuild`` file in a folder called ``.binder`` to `prepare
+their demo for binder <https://github.com/jupyterlab/jupyterlab-demo/blob/HEAD/.binder/postBuild>`_.
 
 
 .. _start:
@@ -207,7 +207,7 @@ For these cases, we have a special file, ``runtime.txt``.
 Have ``python-x.y`` in ``runtime.txt`` to run the repository with Python version x.y.
 See our `Python2 example repository <https://github.com/binder-examples/python2_runtime/blob/HEAD/runtime.txt>`_.
 
-Have ``r-<RVERSION>-<YYYY>-<MM>-<DD>`` in ``runtime.txt`` to run the repository with R version RVERSION and libraries from a YYYY-MM-DD snapshot of `MRAN <https://mran.microsoft.com/documents/rro/reproducibility>`_.
+Have ``r-<RVERSION>-<YYYY>-<MM>-<DD>`` in ``runtime.txt`` to run the repository with R version RVERSION and libraries from a YYYY-MM-DD snapshot of `Posit Package Manager <https://packagemanager.posit.co/client/#/repos/2/overview>`__.
 RVERSION can be set to 3.4, 3.5, 3.6, or to patch releases for the 3.5 and 3.6 series.
 If you do not specify a version, the latest release will be used (currently R 3.6).
 See our `R example repository <https://github.com/binder-examples/r/blob/HEAD/runtime.txt>`_.
@@ -232,6 +232,8 @@ to produce a reproducible environment.
 To see an example repository visit
 `nix binder example <https://github.com/binder-examples/nix>`_.
 
+
+.. _dockerfile:
 
 ``Dockerfile`` - Advanced environments
 ======================================

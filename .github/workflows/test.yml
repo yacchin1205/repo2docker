@@ -69,8 +69,8 @@ jobs:
             repo_type: venv
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "${{ matrix.python_version }}"
 
@@ -93,4 +93,4 @@ jobs:
         run: |
           pytest --verbose --color=yes --durations=10 --cov=repo2docker tests/${{ matrix.repo_type }}
 
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
