@@ -1,6 +1,8 @@
 """Generates a Dockerfile based on an input matrix for Julia"""
+
 import functools
 import os
+from functools import lru_cache
 
 import requests
 import semver
@@ -19,14 +21,14 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
     # Note that these must remain ordered, in order for the find_semver_match()
     # function to behave correctly.
     @property
-    @functools.lru_cache(maxsize=1)
+    @lru_cache(maxsize=1)
     def all_julias(self):
         try:
             json = requests.get(
                 "https://julialang-s3.julialang.org/bin/versions.json"
             ).json()
         except Exception as e:
-            raise RuntimeError("Failed to fetch available Julia versions: {e}")
+            raise RuntimeError(f"Failed to fetch available Julia versions: {e}")
         vers = [semver.VersionInfo.parse(v) for v in json.keys()]
         # filter out pre-release versions not supported by find_semver_match()
         filtered_vers = [v for v in vers if v.prerelease is None]
@@ -67,6 +69,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             raise RuntimeError("Failed to find a matching Julia version: {compat}")
         return match
 
+    @lru_cache()
     def get_build_env(self):
         """Get additional environment settings for Julia and Jupyter
 
@@ -109,9 +112,11 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
         else:
             return "${REPO_DIR}"
 
+    @lru_cache()
     def get_env(self):
         return super().get_env() + [("JULIA_PROJECT", self.project_dir)]
 
+    @lru_cache()
     def get_path(self):
         """Adds path to Julia binaries to user's PATH.
 
@@ -122,6 +127,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
         """
         return super().get_path() + ["${JULIA_PATH}/bin"]
 
+    @lru_cache()
     def get_build_scripts(self):
         """
         Return series of build-steps common to "ALL" Julia repositories
@@ -150,6 +156,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             ),
         ]
 
+    @lru_cache()
     def get_assemble_scripts(self):
         """
         Return series of build-steps specific to "this" Julia repository

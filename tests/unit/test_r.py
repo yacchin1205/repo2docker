@@ -10,7 +10,7 @@ from repo2docker import buildpacks
 @pytest.mark.parametrize(
     "runtime_version, expected", [("", "4.2"), ("3.6", "3.6"), ("3.5.1", "3.5")]
 )
-def test_version_specification(tmpdir, runtime_version, expected):
+def test_version_specification(tmpdir, runtime_version, expected, base_image):
     tmpdir.chdir()
 
     with open("runtime.txt", "w") as f:
@@ -18,17 +18,17 @@ def test_version_specification(tmpdir, runtime_version, expected):
             runtime_version += "-"
         f.write(f"r-{runtime_version}2019-01-01")
 
-    r = buildpacks.RBuildPack()
+    r = buildpacks.RBuildPack(base_image)
     assert r.r_version.startswith(expected)
 
 
-def test_version_completion(tmpdir):
+def test_version_completion(tmpdir, base_image):
     tmpdir.chdir()
 
     with open("runtime.txt", "w") as f:
-        f.write(f"r-3.6-2019-01-01")
+        f.write("r-3.6-2019-01-01")
 
-    r = buildpacks.RBuildPack()
+    r = buildpacks.RBuildPack(base_image)
     assert r.r_version == "3.6.3"
 
 
@@ -40,19 +40,19 @@ def test_version_completion(tmpdir):
         ("r-3.5-2019-01-01", (2019, 1, 1)),
     ],
 )
-def test_mran_date(tmpdir, runtime, expected):
+def test_cran_date(tmpdir, runtime, expected, base_image):
     tmpdir.chdir()
 
     with open("runtime.txt", "w") as f:
         f.write(runtime)
 
-    r = buildpacks.RBuildPack()
+    r = buildpacks.RBuildPack(base_image)
     assert r.checkpoint_date == date(*expected)
 
 
-def test_snapshot_rspm_date():
+def test_snapshot_rspm_date(base_image):
     test_dates = {
-        # Even though there is no snapshot specified in the interface at https://packagemanager.rstudio.com/client/#/repos/1/overview
+        # Even though there is no snapshot specified in the interface at https://packagemanager.posit.co/client/#/repos/1/overview
         # For 2021 Oct 22, the API still returns a valid URL that one can install
         # packages from - probably some server side magic that repeats our client side logic.
         # No snapshot for this date from
@@ -61,11 +61,12 @@ def test_snapshot_rspm_date():
         date(2022, 1, 1): date(2022, 1, 1),
     }
 
-    r = buildpacks.RBuildPack()
+    r = buildpacks.RBuildPack(base_image)
     for requested, expected in test_dates.items():
         snapshot_url = r.get_rspm_snapshot_url(requested)
         assert snapshot_url.startswith(
-            "https://packagemanager.rstudio.com/all/__linux__/bionic/"
+            # VERSION_CODENAME is handled at runtime during the build
+            "https://packagemanager.posit.co/all/__linux__/${VERSION_CODENAME}/"
             + expected.strftime("%Y-%m-%d")
         )
 
@@ -73,21 +74,15 @@ def test_snapshot_rspm_date():
         r.get_rspm_snapshot_url(date(1691, 9, 5))
 
 
-@pytest.mark.parametrize("expected", [date(2019, 12, 29), date(2019, 12, 26)])
-@pytest.mark.parametrize("requested", [date(2019, 12, 31)])
-def test_snapshot_mran_date(requested, expected):
-    def mock_request_head(url):
-        r = Response()
-        if url == "https://mran.microsoft.com/snapshot/" + expected.isoformat():
-            r.status_code = 200
-        else:
-            r.status_code = 404
-            r.reason = "Mock MRAN no snapshot"
-        return r
+def test_mran_dead(tmpdir, base_image):
+    tmpdir.chdir()
 
-    with patch("requests.head", side_effect=mock_request_head):
-        r = buildpacks.RBuildPack()
-        assert (
-            r.get_mran_snapshot_url(requested)
-            == f"https://mran.microsoft.com/snapshot/{expected.isoformat()}"
-        )
+    with open("runtime.txt", "w") as f:
+        f.write("r-3.6-2017-06-04")
+
+    r = buildpacks.RBuildPack(base_image)
+    with pytest.raises(
+        RuntimeError,
+        match=r"^Microsoft killed MRAN, the source of R package snapshots before 2018-12-07.*",
+    ):
+        r.get_build_scripts()

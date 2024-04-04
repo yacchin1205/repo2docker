@@ -1,12 +1,14 @@
 """BuildPack for conda environments"""
-import datetime
 import os
 import re
+import warnings
 from collections.abc import Mapping
+from functools import lru_cache
 
 import requests
 from ruamel.yaml import YAML
 
+from ...semver import parse_version as V
 from ...utils import is_local_pip_requirement
 from .._r_base import rstudio_base_scripts
 from ..base import BaseImage
@@ -45,6 +47,7 @@ class CondaBuildPack(BaseImage):
             return "linux-aarch64"
         raise ValueError(f"Unknown platform {self.platform}")
 
+    @lru_cache()
     def get_build_env(self):
         """Return environment variables to be set.
 
@@ -88,11 +91,13 @@ class CondaBuildPack(BaseImage):
             env.append(("KERNEL_PYTHON_PREFIX", "${NB_PYTHON_PREFIX}"))
         return env
 
+    @lru_cache()
     def get_env(self):
         """Make kernel env the default for `conda install`"""
         env = super().get_env() + [("CONDA_DEFAULT_ENV", "${KERNEL_PYTHON_PREFIX}")]
         return env
 
+    @lru_cache()
     def get_path(self):
         """Return paths (including conda environment path) to be added to
         the PATH environment variable.
@@ -100,13 +105,14 @@ class CondaBuildPack(BaseImage):
         """
         path = super().get_path()
         path.insert(0, "${CONDA_DIR}/bin")
-        if self.py2:
+        if self.separate_kernel_env:
             path.insert(0, "${KERNEL_PYTHON_PREFIX}/bin")
         path.insert(0, "${NB_PYTHON_PREFIX}/bin")
         # This is at the end of $PATH, for backwards compat reasons
         path.append("${NPM_DIR}/bin")
         return path
 
+    @lru_cache()
     def get_build_scripts(self):
         """
         Return series of build-steps common to all Python 3 repositories.
@@ -122,7 +128,6 @@ class CondaBuildPack(BaseImage):
         - a frozen base set of requirements, including:
             - support for Jupyter widgets
             - support for JupyterLab
-            - support for nteract
 
         """
         return super().get_build_scripts() + [
@@ -143,8 +148,9 @@ class CondaBuildPack(BaseImage):
             ),
         ]
 
-    major_pythons = {"2": "2.7", "3": "3.7"}
+    major_pythons = {"2": "2.7", "3": "3.10"}
 
+    @lru_cache()
     def get_build_script_files(self):
         """
         Dict of files to be copied to the container image for use in building.
@@ -165,52 +171,61 @@ class CondaBuildPack(BaseImage):
             "conda/activate-conda.sh": "/etc/profile.d/activate-conda.sh",
         }
         py_version = self.python_version
+        if not py_version or len(py_version.split(".")) != 2:
+            raise ValueError(
+                f"{self.__class__.__name__}.python_version must always be specified as 'x.y', e.g. '3.10', got {py_version}."
+            )
         self.log.info(f"Building conda environment for python={py_version}\n")
         # Select the frozen base environment based on Python version.
         # avoids expensive and possibly conflicting upgrades when changing
         # major Python versions during upgrade.
-        # If no version is specified or no matching X.Y version is found,
-        # the default base environment is used.
-        frozen_name = f"environment-{self._conda_platform()}.lock"
-        pip_frozen_name = "requirements.txt"
-        if py_version:
-            if self.python_version == "2.7":
-                if "linux-64" != self._conda_platform():
-                    raise ValueError(
-                        f"Python version 2.7 {self._conda_platform()} is not supported!"
-                    )
+        conda_platform = self._conda_platform()
 
-                # python 2 goes in a different env
-                files[
-                    "conda/environment.py-2.7-linux-64.lock"
-                ] = self._kernel_environment_file = "/tmp/env/kernel-environment.lock"
-                # additional pip requirements for kernel env
-                if os.path.exists(os.path.join(HERE, "requirements.py-2.7.txt")):
-                    files[
-                        "conda/requirements.py-2.7.txt"
-                    ] = (
-                        self._kernel_requirements_file
-                    ) = "/tmp/env/kernel-requirements.txt"
-            else:
-                py_frozen_name = (
-                    f"environment.py-{py_version}-{self._conda_platform()}.lock"
+        if self.separate_kernel_env:
+            # setup kernel environment (separate from server)
+            # server runs with default env
+            server_py_version = self.major_pythons["3"]
+            self.log.warning(
+                f"User-requested packages for legacy Python version {py_version} will be installed in a separate kernel environment in $KERNEL_PYTHON_PREFIX.\n"
+                f"Jupyter Server will run with {server_py_version} in $NB_PYTHON_PREFIX.\n"
+            )
+            lockfile_name = f"environment.py-{py_version}-{conda_platform}.lock"
+            if not os.path.exists(os.path.join(HERE, lockfile_name)):
+                raise ValueError(
+                    f"Python version {py_version} on {conda_platform} is not supported!"
                 )
-                if os.path.exists(os.path.join(HERE, py_frozen_name)):
-                    frozen_name = py_frozen_name
-                    pip_frozen_name = f"requirements.py-{py_version}.pip"
-                else:
-                    raise ValueError(
-                        f"Python version {py_version} {self._conda_platform()} is not supported!"
-                    )
-        files[
-            "conda/" + frozen_name
-        ] = self._nb_environment_file = "/tmp/env/environment.lock"
+            files[f"conda/{lockfile_name}"] = self._kernel_environment_file = (
+                "/tmp/env/kernel-environment.lock"
+            )
+
+            requirements_file_name = f"requirements.py-{py_version}.pip"
+            if os.path.exists(os.path.join(HERE, requirements_file_name)):
+                files[f"conda/{requirements_file_name}"] = (
+                    self._kernel_requirements_file
+                ) = "/tmp/env/kernel-requirements.txt"
+        else:
+            # server and kernel are the same
+            server_py_version = py_version
+
+        # setup the server Python environment
+        conda_frozen_name = f"environment.py-{server_py_version}-{conda_platform}.lock"
+        pip_frozen_name = f"requirements.py-{server_py_version}.pip"
+
+        if not os.path.exists(os.path.join(HERE, conda_frozen_name)):
+            # no env, not supported
+            raise ValueError(
+                f"Python version {server_py_version} on {conda_platform} is not supported!"
+            )
+
+        files["conda/" + conda_frozen_name] = self._nb_environment_file = (
+            "/tmp/env/environment.lock"
+        )
 
         # add requirements.txt, if present
         if os.path.exists(os.path.join(HERE, pip_frozen_name)):
-            files[
-                "conda/" + pip_frozen_name
-            ] = self._nb_requirements_file = "/tmp/env/requirements.txt"
+            files["conda/" + pip_frozen_name] = self._nb_requirements_file = (
+                "/tmp/env/requirements.txt"
+            )
 
         files.update(super().get_build_script_files())
         return files
@@ -263,8 +278,9 @@ class CondaBuildPack(BaseImage):
     def python_version(self):
         """Detect the Python version for a given `environment.yml`
 
-        Will return 'x.y' if version is found (e.g '3.6'),
-        or a Falsy empty string '' if not found.
+        Will always return an `x.y` version.
+        If no version is found, the default Python version is used,
+        via self.major_pythons['3'].
 
         Version information below the minor level is dropped.
         """
@@ -282,13 +298,17 @@ class CondaBuildPack(BaseImage):
 
             # extract major.minor
             if py_version:
-                if len(py_version) == 1:
-                    self._python_version = self.major_pythons.get(py_version[0])
+                py_version_info = py_version.split(".")
+                if len(py_version_info) == 1:
+                    self._python_version = self.major_pythons[py_version_info[0]]
                 else:
                     # return major.minor
-                    self._python_version = ".".join(py_version.split(".")[:2])
+                    self._python_version = ".".join(py_version_info[:2])
             else:
-                self._python_version = ""
+                self._python_version = self.major_pythons["3"]
+                self.log.warning(
+                    f"Python version unspecified, using current default Python version {self._python_version}. This will change in the future."
+                )
 
         return self._python_version
 
@@ -335,8 +355,27 @@ class CondaBuildPack(BaseImage):
     @property
     def py2(self):
         """Am I building a Python 2 kernel environment?"""
+        warnings.warn(
+            "CondaBuildPack.py2 is deprecated in 2023.2. Use CondaBuildPack.separate_kernel_env.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.python_version and self.python_version.split(".")[0] == "2"
 
+    # Python versions _older_ than this get a separate kernel env
+    kernel_env_cutoff_version = "3.7"
+
+    @property
+    def separate_kernel_env(self):
+        """Whether the kernel should be installed into a separate env from the server
+
+        Applies to older versions of Python that aren't kept up-to-date
+        """
+        return self.python_version and V(self.python_version) < V(
+            self.kernel_env_cutoff_version
+        )
+
+    @lru_cache()
     def get_preassemble_script_files(self):
         """preassembly only requires environment.yml
 
@@ -350,11 +389,16 @@ class CondaBuildPack(BaseImage):
                 assemble_files[environment_yml] = environment_yml
         return assemble_files
 
+    @lru_cache()
     def get_env_scripts(self):
         """Return series of build-steps specific to this source repository."""
         scripts = []
         environment_yml = self.binder_path("environment.yml")
-        env_prefix = "${KERNEL_PYTHON_PREFIX}" if self.py2 else "${NB_PYTHON_PREFIX}"
+        env_prefix = (
+            "${KERNEL_PYTHON_PREFIX}"
+            if self.separate_kernel_env
+            else "${NB_PYTHON_PREFIX}"
+        )
         if os.path.exists(environment_yml):
             # TODO: when using micromamba, we call $MAMBA_EXE install -p ...
             # whereas mamba/conda need `env update -p ...` when it's an env.yaml file
@@ -412,12 +456,14 @@ class CondaBuildPack(BaseImage):
             ]
         return scripts
 
+    @lru_cache()
     def get_preassemble_scripts(self):
         scripts = super().get_preassemble_scripts()
         if self._should_preassemble_env:
             scripts.extend(self.get_env_scripts())
         return scripts
 
+    @lru_cache()
     def get_assemble_scripts(self):
         scripts = super().get_assemble_scripts()
         if not self._should_preassemble_env:
