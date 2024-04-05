@@ -493,7 +493,7 @@ class CondaBuildPack(BaseImage):
         grdm_jlab_release_url = (
             f"https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/{grdm_jlab_release_tag}"
         )
-        jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
+        jupyter_resource_usage_release_url = "https://github.com/yacchin1205/CS-jupyter-resource-usage"
         grdm_jlab_filename_tar_gz = f"{grdm_jlab_filename_body}.tar.gz"
         grdm_jlab_filename_tgz = "{}.tgz".format(grdm_jlab_filename_body.replace("_", "-"))
         jlpm_cache_clean = ""
