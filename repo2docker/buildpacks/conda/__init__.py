@@ -540,8 +540,10 @@ rm -fr ~/.cache/pip
         )
 
         if post:
+            install_grdm = 'if(\\"devtools\\" %in% rownames(installed.packages())) ' \
+                + 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'
             bash_scripts = f"""
-if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
+if [ -x \\"$(command -v R)\\" ]; then R -e '{install_grdm}'; fi
 """
         else:
             bash_scripts = f"""
