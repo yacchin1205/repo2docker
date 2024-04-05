@@ -486,14 +486,19 @@ class CondaBuildPack(BaseImage):
 
         return scripts
 
-    def _get_jlab_extension_script(self, grdm_jlab_release_tag, grdm_jlab_filename_body):
+    def _get_jlab_extension_script(
+        self, grdm_jlab_release_tag, grdm_jlab_filename_body, jupyter_resource_usage_tag,
+        perform_jlpm_cache_clean=True,
+    ):
         grdm_jlab_release_url = (
             f"https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/{grdm_jlab_release_tag}"
         )
         jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
-        jupyter_resource_usage_tag = "main"
         grdm_jlab_filename_tar_gz = f"{grdm_jlab_filename_body}.tar.gz"
         grdm_jlab_filename_tgz = "{}.tgz".format(grdm_jlab_filename_body.replace("_", "-"))
+        jlpm_cache_clean = ""
+        if perform_jlpm_cache_clean:
+            jlpm_cache_clean = "jlpm cache clean"
         jlab_ext_scripts = f"""
 pip3 install {grdm_jlab_release_url}/{grdm_jlab_filename_tar_gz}
 pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
@@ -506,7 +511,7 @@ jupyter labextension enable jupyter_resource_usage
 jupyter serverextension enable --py jupyter_resource_usage
 jupyter nbextension install --py jupyter_resource_usage --user
 jupyter nbextension enable --py jupyter_resource_usage --user
-jlpm cache clean
+{jlpm_cache_clean}
 npm cache clean --force
 pip3 cache purge
 """
@@ -526,10 +531,11 @@ pip3 cache purge
         grdm_jlab4_filename_body = f"rdm_binderhub_jlabextension-{grdm_jlab4_release_tag}"
 
         jlab3_ext_script = self._get_jlab_extension_script(
-            grdm_jlab3_release_tag, grdm_jlab3_filename_body
+            grdm_jlab3_release_tag, grdm_jlab3_filename_body, 'v2023.07',
         )
         jlab4_ext_script = self._get_jlab_extension_script(
-            grdm_jlab4_release_tag, grdm_jlab4_filename_body
+            grdm_jlab4_release_tag, grdm_jlab4_filename_body, 'v2024.04',
+            perform_jlpm_cache_clean=False,
         )
 
         if post:
