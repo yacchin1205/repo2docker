@@ -500,8 +500,8 @@ class CondaBuildPack(BaseImage):
         if perform_jlpm_cache_clean:
             jlpm_cache_clean = "jlpm cache clean"
         jlab_ext_scripts = f"""
-pip3 install {grdm_jlab_release_url}/{grdm_jlab_filename_tar_gz}
-pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
+pip3 install --no-cache-dir {grdm_jlab_release_url}/{grdm_jlab_filename_tar_gz}
+pip3 install --no-cache-dir git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
 jupyter labextension install {grdm_jlab_release_url}/{grdm_jlab_filename_tgz}
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
@@ -514,6 +514,7 @@ jupyter nbextension enable --py jupyter_resource_usage --user
 {jlpm_cache_clean}
 npm cache clean --force
 pip3 cache purge
+rm -fr ~/.cache/pip
 """
         return " && ".join(
             [
@@ -546,8 +547,8 @@ if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/C
             bash_scripts = f"""
 [ -x \\"$(command -v pip3)\\" ]
 jupyter lab --version
-bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 3 ]; then {jlab3_ext_script}; fi'
-bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 4 ]; then {jlab4_ext_script}; fi'
+env DISABLE_V8_COMPILE_CACHE=1 bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 3 ]; then {jlab3_ext_script}; fi'
+env DISABLE_V8_COMPILE_CACHE=1 bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 4 ]; then {jlab4_ext_script}; fi'
 """
         return " && ".join(
             [line.strip() for line in bash_scripts.split("\n") if len(line.strip()) > 0]
