@@ -486,17 +486,16 @@ class CondaBuildPack(BaseImage):
 
         return scripts
 
-    def get_custom_extension_script(self, post):
+    def _get_jlab_extension_script(self, grdm_jlab_release_tag, grdm_jlab_filename_body):
         grdm_jlab_release_url = (
-            "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.2.0"
+            f"https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/{grdm_jlab_release_tag}"
         )
-        grdm_jlab_release_tag = "0.2.0"
         jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
         jupyter_resource_usage_tag = "main"
         jlab_ext_scripts = f"""
-pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
+pip3 install {grdm_jlab_release_url}/{grdm_jlab_filename_body}.tar.gz
 pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
-jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
+jupyter labextension install {grdm_jlab_release_url}/{grdm_jlab_filename_body}.tgz
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
 jupyter nbextension install --py rdm_binderhub_jlabextension --user
@@ -509,20 +508,38 @@ jlpm cache clean
 npm cache clean --force
 pip3 cache purge
 """
-        jlab_ext_script = " && ".join(
+        return " && ".join(
             [
                 line.strip()
                 for line in jlab_ext_scripts.split("\n")
                 if len(line.strip()) > 0
             ]
         )
+
+    def get_custom_extension_script(self, post):
+        grdm_jlab3_release_tag = "0.2.0"
+        grdm_jlab3_filename_body = f"rdm_binderhub_jlabextension-refs.tags.{grdm_jlab3_release_tag}"
+
+        grdm_jlab4_release_tag = "0.3.0"
+        grdm_jlab4_filename_body = f"rdm_binderhub_jlabextension-{grdm_jlab4_release_tag}"
+
+        jlab3_ext_script = self._get_jlab_extension_script(
+            grdm_jlab3_release_tag, grdm_jlab3_filename_body
+        )
+        jlab4_ext_script = self._get_jlab_extension_script(
+            grdm_jlab4_release_tag, grdm_jlab4_filename_body
+        )
+
         if post:
             bash_scripts = f"""
 if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
 """
         else:
             bash_scripts = f"""
-if [ -x \\"$(command -v pip3)\\" ] && jupyter lab --version && [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -gt 2 ]; then {jlab_ext_script}; fi
+[ -x \\"$(command -v pip3)\\" ]
+jupyter lab --version
+bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 3 ]; then {jlab3_ext_script}; fi'
+bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 4 ]; then {jlab4_ext_script}; fi'
 """
         return " && ".join(
             [line.strip() for line in bash_scripts.split("\n") if len(line.strip()) > 0]
