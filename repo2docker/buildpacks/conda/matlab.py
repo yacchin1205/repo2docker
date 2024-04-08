@@ -14,7 +14,8 @@ def matlab_requirements_scripts(release, base_image):
     if image_name not in UBUNTU_NAMES_FOR_BASE_IMAGES:
         raise ValueError(f"Unknown base image: {base_image}")
     ubuntu_name = UBUNTU_NAMES_FOR_BASE_IMAGES[image_name]
-    url = f"https://raw.githubusercontent.com/mathworks-ref-arch/container-images/main/matlab-deps/{release}/{ubuntu_name}/base-dependencies.txt"
+    lrelease = release.lower()
+    url = f"https://raw.githubusercontent.com/mathworks-ref-arch/container-images/main/matlab-deps/{lrelease}/{ubuntu_name}/base-dependencies.txt"
     resp = requests.get(url)
     resp.raise_for_status()
     base_apt_packages = ["wget", "unzip", "ca-certificates", "xvfb", "git"]
@@ -33,7 +34,7 @@ def matlab_installation_scripts(release, products, dest_dir):
     
     Based on https://github.com/mathworks-ref-arch/matlab-integration-for-jupyter/blob/a4ac9b9ce5c2880596c77670eddab93f7ef9d4fc/matlab/Dockerfile#L90-L98
     """
-    all_products = list(products)
+    all_products = list(products) if products is not None else []
     if "MATLAB" not in all_products:
         all_products = ["MATLAB"] + all_products
     products_list = " ".join(all_products)
