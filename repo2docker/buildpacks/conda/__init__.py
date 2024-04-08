@@ -486,17 +486,23 @@ class CondaBuildPack(BaseImage):
 
         return scripts
 
-    def get_custom_extension_script(self, post):
+    def _get_jlab_extension_script(
+        self, grdm_jlab_release_tag, grdm_jlab_filename_body, jupyter_resource_usage_tag,
+        perform_jlpm_cache_clean=True,
+    ):
         grdm_jlab_release_url = (
-            "https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/0.2.0"
+            f"https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/{grdm_jlab_release_tag}"
         )
-        grdm_jlab_release_tag = "0.2.0"
         jupyter_resource_usage_release_url = "https://github.com/RCOSDP/CS-jupyter-resource-usage"
-        jupyter_resource_usage_tag = "main"
+        grdm_jlab_filename_tar_gz = f"{grdm_jlab_filename_body}.tar.gz"
+        grdm_jlab_filename_tgz = "{}.tgz".format(grdm_jlab_filename_body.replace("_", "-"))
+        jlpm_cache_clean = ""
+        if perform_jlpm_cache_clean:
+            jlpm_cache_clean = "jlpm cache clean"
         jlab_ext_scripts = f"""
-pip3 install {grdm_jlab_release_url}/rdm_binderhub_jlabextension-refs.tags.{grdm_jlab_release_tag}.tar.gz
-pip3 install git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
-jupyter labextension install {grdm_jlab_release_url}/rdm-binderhub-jlabextension-refs.tags.{grdm_jlab_release_tag}.tgz
+pip3 install --no-cache-dir {grdm_jlab_release_url}/{grdm_jlab_filename_tar_gz}
+pip3 install --no-cache-dir git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
+jupyter labextension install {grdm_jlab_release_url}/{grdm_jlab_filename_tgz}
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
 jupyter nbextension install --py rdm_binderhub_jlabextension --user
@@ -505,24 +511,46 @@ jupyter labextension enable jupyter_resource_usage
 jupyter serverextension enable --py jupyter_resource_usage
 jupyter nbextension install --py jupyter_resource_usage --user
 jupyter nbextension enable --py jupyter_resource_usage --user
-jlpm cache clean
+{jlpm_cache_clean}
 npm cache clean --force
 pip3 cache purge
+rm -fr ~/.cache/pip
 """
-        jlab_ext_script = " && ".join(
+        return " && ".join(
             [
                 line.strip()
                 for line in jlab_ext_scripts.split("\n")
                 if len(line.strip()) > 0
             ]
         )
+
+    def get_custom_extension_script(self, post):
+        grdm_jlab3_release_tag = "0.2.0"
+        grdm_jlab3_filename_body = f"rdm_binderhub_jlabextension-refs.tags.{grdm_jlab3_release_tag}"
+
+        grdm_jlab4_release_tag = "0.3.0"
+        grdm_jlab4_filename_body = f"rdm_binderhub_jlabextension-{grdm_jlab4_release_tag}"
+
+        jlab3_ext_script = self._get_jlab_extension_script(
+            grdm_jlab3_release_tag, grdm_jlab3_filename_body, 'v2023.07',
+        )
+        jlab4_ext_script = self._get_jlab_extension_script(
+            grdm_jlab4_release_tag, grdm_jlab4_filename_body, 'v2024.04',
+            perform_jlpm_cache_clean=False,
+        )
+
         if post:
+            install_grdm = 'if(\\"devtools\\" %in% rownames(installed.packages())) ' \
+                + 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'
             bash_scripts = f"""
-if [ -x \\"$(command -v R)\\" ]; then R -e 'devtools::install_github(\\"RCOSDP/CS-rstudio-grdm\\", type = \\"source\\")'; fi
+if [ -x \\"$(command -v R)\\" ]; then R -e '{install_grdm}'; fi
 """
         else:
             bash_scripts = f"""
-if [ -x \\"$(command -v pip3)\\" ] && jupyter lab --version && [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -gt 2 ]; then {jlab_ext_script}; fi
+[ -x \\"$(command -v pip3)\\" ]
+jupyter lab --version
+env DISABLE_V8_COMPILE_CACHE=1 bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 3 ]; then {jlab3_ext_script}; fi'
+env DISABLE_V8_COMPILE_CACHE=1 bash -c 'if [ \\"$(jupyter lab --version | cut -d . -f 1)\\" -eq 4 ]; then {jlab4_ext_script}; fi'
 """
         return " && ".join(
             [line.strip() for line in bash_scripts.split("\n") if len(line.strip()) > 0]
