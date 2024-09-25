@@ -483,13 +483,14 @@ class CondaBuildPack(BaseImage):
         installR_path = self.binder_path("install.R")
         if not os.path.exists(installR_path):
             return []
-        repo_url = 'https://cran.ism.ac.jp/'
+        repo_url = 'https://cloud.r-project.org/'
         return [
             (
                 "${NB_USER}",
                 # Delete any downloaded packages in /tmp, as they aren't reused by R
                 f"""echo 'r = getOption("repos")' > /tmp/install.R && \
                 echo 'r["CRAN"] = "{repo_url}"' >> /tmp/install.R && \
+                echo 'options(warn = 2)' >> /tmp/install.R && \
                 echo 'options(repos = r)' >> /tmp/install.R && \
                 cat {installR_path} >> /tmp/install.R && \
                 Rscript /tmp/install.R && rm -rf /tmp/downloaded_packages""",
