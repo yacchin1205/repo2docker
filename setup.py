@@ -59,7 +59,7 @@ setup(
         "requests",
         "ruamel.yaml>=0.15",
         "semver",
-        "osfclient @ git+https://github.com/RCOSDP/rdmclient.git",
+        "osfclient @ git+https://github.com/RCOSDP/rdmclient.git@ab531e89148c4af48e4e1f123edc8e35690f31bc",
         "toml",
         "traitlets",
         "beautifulsoup4>=4.10.0",
