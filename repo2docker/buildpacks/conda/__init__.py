@@ -566,6 +566,7 @@ jupyter server extension enable --py jupyter_resource_usage
 {npm_cache_clean}
 pip3 cache purge
 rm -fr ~/.cache/pip
+rm -fr ~/.yarn/berry/cache
 """
         return " && ".join(
             [
