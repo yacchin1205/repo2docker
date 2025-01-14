@@ -525,7 +525,10 @@ class CondaBuildPack(BaseImage):
 
     def _get_jlab_extension_script(
         self, grdm_jlab_release_tag, grdm_jlab_filename_body, jupyter_resource_usage_tag,
+        perform_labextension_install=True,
+        perform_nbextension_install=True,
         perform_jlpm_cache_clean=True,
+        perform_npm_cache_clean=True,
     ):
         grdm_jlab_release_url = (
             f"https://github.com/RCOSDP/CS-jupyterlab-grdm/releases/download/{grdm_jlab_release_tag}"
@@ -536,20 +539,31 @@ class CondaBuildPack(BaseImage):
         jlpm_cache_clean = ""
         if perform_jlpm_cache_clean:
             jlpm_cache_clean = "jlpm cache clean"
+        npm_cache_clean = ""
+        if perform_npm_cache_clean:
+            npm_cache_clean = "npm cache clean --force"
+        grdm_labextension_install = ""
+        if perform_labextension_install:
+            grdm_labextension_install = f"jupyter labextension install {grdm_jlab_release_url}/{grdm_jlab_filename_tgz}"
+        grdm_nbextension_install = ""
+        if perform_nbextension_install:
+            grdm_nbextension_install = f"""
+jupyter nbextension install --py rdm_binderhub_jlabextension --user
+jupyter nbextension enable --py rdm_binderhub_jlabextension --user
+jupyter nbextension install --py jupyter_resource_usage --user
+jupyter nbextension enable --py jupyter_resource_usage --user
+"""
         jlab_ext_scripts = f"""
 pip3 install --no-cache-dir {grdm_jlab_release_url}/{grdm_jlab_filename_tar_gz}
 pip3 install --no-cache-dir git+{jupyter_resource_usage_release_url}@{jupyter_resource_usage_tag}
-jupyter labextension install {grdm_jlab_release_url}/{grdm_jlab_filename_tgz}
+{grdm_labextension_install}
 jupyter labextension enable rdm-binderhub-jlabextension
 jupyter server extension enable rdm_binderhub_jlabextension
-jupyter nbextension install --py rdm_binderhub_jlabextension --user
-jupyter nbextension enable --py rdm_binderhub_jlabextension --user
 jupyter labextension enable jupyter_resource_usage
-jupyter serverextension enable --py jupyter_resource_usage
-jupyter nbextension install --py jupyter_resource_usage --user
-jupyter nbextension enable --py jupyter_resource_usage --user
+jupyter server extension enable --py jupyter_resource_usage
+{grdm_nbextension_install}
 {jlpm_cache_clean}
-npm cache clean --force
+{npm_cache_clean}
 pip3 cache purge
 rm -fr ~/.cache/pip
 """
@@ -573,7 +587,10 @@ rm -fr ~/.cache/pip
         )
         jlab4_ext_script = self._get_jlab_extension_script(
             grdm_jlab4_release_tag, grdm_jlab4_filename_body, 'v2024.04',
+            perform_labextension_install=False,
+            perform_nbextension_install=False,
             perform_jlpm_cache_clean=False,
+            perform_npm_cache_clean=False,
         )
 
         if post:
