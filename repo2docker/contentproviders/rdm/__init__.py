@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Union
 import shutil
 import tempfile
 import uuid
-import yaml
+from ruamel.yaml import YAML
 
 from ..base import ContentProvider
 
@@ -244,8 +244,9 @@ class RDM(ContentProvider):
                 'paths': [],
             })
         else:
+            yaml = YAML(typ='safe', pure=True)
             with open(binder_folders_yaml) as f:
-                paths_mapping = PathsMapping(yaml.safe_load(f))
+                paths_mapping = PathsMapping(yaml.load(f))
         provisioner = Provisioner(project, default_storage_path.strip("/"))
         for path_mapping in paths_mapping.get_paths_to_copy():
             source = path_mapping.get_source(default_storage_path.strip("/"))

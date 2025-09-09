@@ -16,6 +16,8 @@ class RDMURL:
     @property
     def project_path(self) -> str:
         """Get the project path from the URL."""
+        if "/" not in self._url.path.lstrip("/"):
+            return ""
         _, path = self._url.path.lstrip("/").split("/", 1)
         if not path.startswith("files/"):
             return path
