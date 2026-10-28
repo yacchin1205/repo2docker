@@ -40,15 +40,21 @@ env:
   GIT_AUTHOR_EMAIL: ci-user@github.local
   GIT_AUTHOR_NAME: CI User
 
+
 jobs:
   test:
+    # Don't run scheduled tests on forks
+    if: ${{ github.repository_owner == 'jupyterhub' || github.event_name != 'schedule' }}
+
     runs-on: ubuntu-${{ matrix.ubuntu_version }}
 
     strategy:
       fail-fast: false
       matrix:
         ubuntu_version: ["24.04"]
-        python_version: ["3.10"]
+        python_version: ["3.13"]
+        container_cli:
+          - docker
         repo_type:
           - base
           - conda
@@ -60,10 +66,43 @@ jobs:
           - r
           - unit
           - venv
+          - contentproviders
+          - norun
+          # Playwright test
+          - ui
+        # If the item to be include would overwrite a value,
+        # it must have all the fields!
+        include:
+          # The earliest actions/setup-python versions depend on the runner.
+          - ubuntu_version: "24.04"
+            python_version: "3.10"
+            container_cli: docker
+            repo_type: venv
+          # Run all tests for both Docker and Podman is expensive.
+          # We only run the "smoke" test for Podman.
+          - ubuntu_version: "24.04"
+            python_version: "3.13"
+            container_cli: podman
+            repo_type: base
+          # We are observing "no space left on device" on GitHub Actions,
+          # https://github.com/jupyterhub/repo2docker/pull/1471#issuecomment-3744990787
+          # - ubuntu_version: "24.04"
+          #   python_version: "3.13"
+          #   container_cli: podman
+          #   repo_type: conda
+          - ubuntu_version: "24.04"
+            python_version: "3.13"
+            container_cli: podman
+            repo_type: dockerfile
+          - ubuntu_version: "24.04"
+            python_version: "3.13"
+            container_cli: podman
+            repo_type: unit
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
         with:
           python-version: "${{ matrix.python_version }}"
 
@@ -71,6 +110,12 @@ jobs:
         run: |
           pip install -r dev-requirements.txt
           pip freeze
+
+      - name: Install UI test dependencies
+        if: matrix.repo_type == 'ui'
+        run: |
+          pip install -r playwright-requirements.txt
+          playwright install firefox
 
       - name: Install repo2docker
         run: |
@@ -84,6 +129,11 @@ jobs:
 
       - name: Run pytest
         run: |
+          if [ "${{ matrix.container_cli }}" = "podman" ]
+          then
+          systemctl --user start podman.socket
+          export DOCKER_HOST=unix://$(podman info --format '{{.Host.RemoteSocket.Path}}')
+          fi
           pytest --verbose --color=yes --durations=10 --cov=repo2docker tests/${{ matrix.repo_type }}
 
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6

@@ -16,7 +16,7 @@ The use cases for `repo2docker` which drive most design decisions are:
 1. Automated image building used by projects like
    [BinderHub](http://github.com/jupyterhub/binderhub)
 2. Manual image building and running the image from the command line client,
-   `jupyter-repo2docker`, by users interactively on their workstations
+   `repo2docker`, by users interactively on their workstations
 
 ## Deterministic output
 
@@ -43,13 +43,14 @@ This provides a few advantages:
 
 Many ingredients go into making an image from a repository:
 
-1. version of the base docker image
+1. version of the base Docker image
 1. version of `repo2docker` itself
 1. versions of the libraries installed by the repository
 
 `repo2docker` controls the first two, the user controls the third one. The current
 policy for the version of the base image is that we will use the current LTS
-version Jammy Jellyfish (22.04) for the foreseeable future.
+version (24.04) until the start to be build challenges associated with the age of the base system,
+at which point it will be increased to the 'current' LTS when that occurs - typically between 2-5 years from the age of release.
 
 The version of `repo2docker` used to build an image can influence which packages
 are installed by default and which features are supported during the build
@@ -62,7 +63,7 @@ explicitly in your dependencies.
 
 `repo2docker` should do one thing, and do it well. This one thing is:
 
-> Given a repository, deterministically build a docker image from
+> Given a repository, deterministically build a Docker image from
 > it.
 
 There's also some convenience code (to run the built image) for users, but

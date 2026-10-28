@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.3
-ARG ALPINE_VERSION=3.19
+ARG ALPINE_VERSION=3.21
 FROM alpine:${ALPINE_VERSION}
 
 RUN apk add --no-cache git python3 python3-dev py3-pip py3-setuptools build-base
@@ -15,7 +15,7 @@ RUN cd /tmp/src && git clean -xfd && git status
 RUN mkdir /tmp/wheelhouse \
  && cd /tmp/wheelhouse \
  && pip install wheel \
- && pip wheel --no-cache-dir /tmp/src \
+ && pip wheel --no-cache-dir -r /tmp/src/requirements.txt /tmp/src \
  && ls -l /tmp/wheelhouse
 
 FROM alpine:${ALPINE_VERSION}

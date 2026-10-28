@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import io
 import logging
@@ -43,17 +44,30 @@ ARG NB_UID
 ENV USER=${NB_USER} \
     HOME=/home/${NB_USER}
 
-RUN groupadd \
-        --gid ${NB_UID} \
-        ${NB_USER} && \
-    useradd \
+# Ubuntu 24.04 has a predefined uid/gid 1000, older Ubuntu versions don't
+RUN if getent group ${NB_UID}; then \
+      GROUP_1000="$(getent group ${NB_UID} | cut -d: -f1)"; \
+      if [ "$GROUP_1000" != "$NB_USER" ]; then \
+        groupmod --new-name ${NB_USER} "$GROUP_1000"; \
+      fi; \
+    else \
+      groupadd --gid ${NB_UID} ${NB_USER}; \
+    fi
+RUN if id ${NB_UID}; then \
+      USER_1000="$(id ${NB_UID} -un)"; \
+      if [ "$USER_1000" != "$NB_USER" ]; then \
+        usermod --home "/home/$NB_USER" --login "$NB_USER" --move-home "$USER_1000"; \
+      fi; \
+    else \
+      useradd \
         --comment "Default user" \
         --create-home \
         --gid ${NB_UID} \
         --no-log-init \
         --shell /bin/bash \
         --uid ${NB_UID} \
-        ${NB_USER}
+        ${NB_USER}; \
+    fi
 
 # Base package installs are not super interesting to users, so hide their outputs
 # If install fails for some reason, errors will still be printed
@@ -196,8 +210,8 @@ ENV R2D_ENTRYPOINT="{{ start_script }}"
 
 # Add entrypoint
 ENV PYTHONUNBUFFERED=1
-COPY /python3-login /usr/local/bin/python3-login
-COPY /repo2docker-entrypoint /usr/local/bin/repo2docker-entrypoint
+COPY --chmod=0755 /python3-login /usr/local/bin/python3-login
+COPY --chmod=0755 /repo2docker-entrypoint /usr/local/bin/repo2docker-entrypoint
 ENTRYPOINT ["/usr/local/bin/repo2docker-entrypoint"]
 
 # Specify the default command to run
@@ -246,7 +260,7 @@ class BuildPack:
             )
         self.platform = ""
 
-    @lru_cache()
+    @lru_cache
     def get_packages(self):
         """
         List of packages that are installed in this BuildPack.
@@ -256,7 +270,7 @@ class BuildPack:
         """
         return set()
 
-    @lru_cache()
+    @lru_cache
     def get_base_packages(self):
         """
         Base set of apt packages that are installed for all images.
@@ -275,7 +289,7 @@ class BuildPack:
             "gettext-base",
         }
 
-    @lru_cache()
+    @lru_cache
     def get_build_env(self):
         """
         Ordered list of environment variables to be set for this image.
@@ -291,7 +305,7 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_env(self):
         """
         Ordered list of environment variables to be set for this image.
@@ -306,7 +320,7 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_path(self):
         """
         Ordered list of file system paths to look for executables in.
@@ -316,14 +330,14 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_labels(self):
         """
         Docker labels to set on the built image.
         """
         return self.labels
 
-    @lru_cache()
+    @lru_cache
     def get_build_script_files(self):
         """
         Dict of files to be copied to the container image for use in building.
@@ -348,7 +362,7 @@ class BuildPack:
                     f"Found a stencila manifest.xml at {root}. Stencila is no longer supported."
                 )
 
-    @lru_cache()
+    @lru_cache
     def get_build_scripts(self):
         """
         Ordered list of shell script snippets to build the base image.
@@ -370,7 +384,7 @@ class BuildPack:
 
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_script_files(self):
         """
         Dict of files to be copied to the container image for use in preassembly.
@@ -384,7 +398,7 @@ class BuildPack:
         """
         return {}
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_scripts(self):
         """
         Ordered list of shell snippets to build an image for this repository.
@@ -401,7 +415,7 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         """
         Ordered list of shell script snippets to build the repo into the image.
@@ -428,7 +442,7 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_post_build_scripts(self):
         """
         An ordered list of executable scripts to execute after build.
@@ -441,7 +455,7 @@ class BuildPack:
         """
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_start_script(self):
         """
         The path to a script to be executed at container start up.
@@ -692,14 +706,14 @@ class BuildPack:
 
 
 class BaseImage(BuildPack):
-    @lru_cache()
+    @lru_cache
     def get_build_env(self):
         """Return env directives required for build"""
         return [
             ("APP_BASE", "/srv"),
         ]
 
-    @lru_cache()
+    @lru_cache
     def get_env(self):
         """Return env directives to be set after build"""
         return []
@@ -707,7 +721,7 @@ class BaseImage(BuildPack):
     def detect(self):
         return True
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_scripts(self):
         scripts = []
         try:
@@ -736,9 +750,7 @@ class BaseImage(BuildPack):
                 apt-get -qq purge && \
                 apt-get -qq clean && \
                 rm -rf /var/lib/apt/lists/*
-                """.format(
-                        " ".join(sorted(extra_apt_packages))
-                    ),
+                """.format(" ".join(sorted(extra_apt_packages))),
                 )
             )
 
@@ -747,7 +759,7 @@ class BaseImage(BuildPack):
 
         return scripts
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         """Return directives to run after the entire repository has been added to the image"""
         scripts = []
@@ -756,14 +768,14 @@ class BaseImage(BuildPack):
             scripts.append(("root", f"bash {prepare_mnt}"))
         return scripts
 
-    @lru_cache()
+    @lru_cache
     def get_post_build_scripts(self):
         post_build = self.binder_path("postBuild")
         if os.path.exists(post_build):
             return [post_build]
         return []
 
-    @lru_cache()
+    @lru_cache
     def get_start_script(self):
         start = self.binder_path("start")
         if os.path.exists(start):
@@ -774,3 +786,50 @@ class BaseImage(BuildPack):
             # the only path evaluated at container start time rather than build time
             return os.path.join("${REPO_DIR}", start)
         return None
+
+    @property
+    def runtime(self):
+        """
+        Return parsed contents of runtime.txt
+
+        Returns (runtime, version, date), tuple components may be None.
+        Returns (None, None, None) if runtime.txt not found.
+
+        Supported formats:
+          name-version
+          name-version-yyyy-mm-dd
+          name-yyyy-mm-dd
+        """
+        if hasattr(self, "_runtime"):
+            return self._runtime
+
+        self._runtime = (None, None, None)
+
+        runtime_path = self.binder_path("runtime.txt")
+        try:
+            with open(runtime_path) as f:
+                runtime_txt = f.read().strip()
+        except FileNotFoundError:
+            return self._runtime
+
+        name = None
+        version = None
+        date = None
+
+        parts = runtime_txt.split("-")
+        if len(parts) not in (2, 4, 5) or any(not (p) for p in parts):
+            raise ValueError(f"Invalid runtime.txt: {runtime_txt}")
+
+        name = parts[0]
+
+        if len(parts) in (2, 5):
+            version = parts[1]
+
+        if len(parts) in (4, 5):
+            date = "-".join(parts[-3:])
+            if not re.match(r"\d\d\d\d-\d\d-\d\d", date):
+                raise ValueError(f"Invalid runtime.txt date: {date}")
+            date = datetime.datetime.fromisoformat(date).date()
+
+        self._runtime = (name, version, date)
+        return self._runtime

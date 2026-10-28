@@ -69,7 +69,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             raise RuntimeError("Failed to find a matching Julia version: {compat}")
         return match
 
-    @lru_cache()
+    @lru_cache
     def get_build_env(self):
         """Get additional environment settings for Julia and Jupyter
 
@@ -112,11 +112,11 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
         else:
             return "${REPO_DIR}"
 
-    @lru_cache()
+    @lru_cache
     def get_env(self):
         return super().get_env() + [("JULIA_PROJECT", self.project_dir)]
 
-    @lru_cache()
+    @lru_cache
     def get_path(self):
         """Adds path to Julia binaries to user's PATH.
 
@@ -127,7 +127,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
         """
         return super().get_path() + ["${JULIA_PATH}/bin"]
 
-    @lru_cache()
+    @lru_cache
     def get_build_scripts(self):
         """
         Return series of build-steps common to "ALL" Julia repositories
@@ -156,7 +156,7 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
             ),
         ]
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         """
         Return series of build-steps specific to "this" Julia repository
@@ -177,10 +177,8 @@ class JuliaProjectTomlBuildPack(PythonBuildPack):
                 "${NB_USER}",
                 r"""
             JULIA_PROJECT="" julia -e "using Pkg; Pkg.add(\"IJulia\"); using IJulia; installkernel(\"Julia\", \"--project={project}\");" && \
-            julia --project={project} -e 'using Pkg; Pkg.instantiate(); Pkg.resolve(); pkg"precompile"'
-            """.format(
-                    project=self.project_dir
-                ),
+            julia --project={project} -e 'using Pkg; Pkg.instantiate(); Pkg.resolve(); Pkg.instantiate()'
+            """.format(project=self.project_dir),
             )
         )
         return scripts

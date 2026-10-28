@@ -2,7 +2,6 @@
 
 import os
 import re
-import warnings
 from collections.abc import Mapping
 from functools import lru_cache
 
@@ -55,7 +54,7 @@ class CondaBuildPack(BaseImage):
             return "linux-aarch64"
         raise ValueError(f"Unknown platform {self.platform}")
 
-    @lru_cache()
+    @lru_cache
     def get_build_env(self):
         """Return environment variables to be set.
 
@@ -99,14 +98,14 @@ class CondaBuildPack(BaseImage):
             env.append(("KERNEL_PYTHON_PREFIX", "${NB_PYTHON_PREFIX}"))
         return env
 
-    @lru_cache()
+    @lru_cache
     def get_env(self):
         """Make kernel env the default for `conda install`"""
         env = super().get_env() + [("CONDA_DEFAULT_ENV", "${KERNEL_PYTHON_PREFIX}")]
         env += self._get_env_for_matlab()
         return env
 
-    @lru_cache()
+    @lru_cache
     def get_path(self):
         """Return paths (including conda environment path) to be added to
         the PATH environment variable.
@@ -121,7 +120,7 @@ class CondaBuildPack(BaseImage):
         path.append("${NPM_DIR}/bin")
         return path
 
-    @lru_cache()
+    @lru_cache
     def get_build_scripts(self):
         """
         Return series of build-steps common to all Python 3 repositories.
@@ -159,7 +158,7 @@ class CondaBuildPack(BaseImage):
 
     major_pythons = {"2": "2.7", "3": "3.10"}
 
-    @lru_cache()
+    @lru_cache
     def get_build_script_files(self):
         """
         Dict of files to be copied to the container image for use in building.
@@ -239,6 +238,23 @@ class CondaBuildPack(BaseImage):
         files.update(super().get_build_script_files())
         return files
 
+    _environment_yaml_path = None
+
+    @property
+    def environment_yaml_path(self):
+        if self._environment_yaml_path is not None:
+            return self._environment_yaml_path
+
+        for filename in ["environment.yml", "environment.yaml"]:
+            environment_yaml_path = self.binder_path(filename)
+            if os.path.exists(environment_yaml_path):
+                self._environment_yaml_path = environment_yaml_path
+                break
+
+        # Because of backward compatibility, we return None
+        # instead of raise RuntimeError().
+        return self._environment_yaml_path
+
     _environment_yaml = None
 
     @property
@@ -246,12 +262,11 @@ class CondaBuildPack(BaseImage):
         if self._environment_yaml is not None:
             return self._environment_yaml
 
-        environment_yml = self.binder_path("environment.yml")
-        if not os.path.exists(environment_yml):
+        if self.environment_yaml_path is None:
             self._environment_yaml = {}
             return self._environment_yaml
 
-        with open(environment_yml) as f:
+        with open(self.environment_yaml_path) as f:
             env = YAML().load(f)
             # check if the env file is empty, if so instantiate an empty dictionary.
             if env is None:
@@ -259,7 +274,9 @@ class CondaBuildPack(BaseImage):
             # check if the env file provided a dict-like thing not a list or other data structure.
             if not isinstance(env, Mapping):
                 raise TypeError(
-                    "environment.yml should contain a dictionary. Got %r" % type(env)
+                    "{} should contain a dictionary. Got {!r}".format(
+                        self.environment_yaml_path, type(env)
+                    )
                 )
             self._environment_yaml = env
 
@@ -364,7 +381,7 @@ class CondaBuildPack(BaseImage):
     @property
     def py2(self):
         """Am I building a Python 2 kernel environment?"""
-        warnings.warn(
+        self.log.warning(
             "CondaBuildPack.py2 is deprecated in 2023.2. Use CondaBuildPack.separate_kernel_env.",
             DeprecationWarning,
             stacklevel=2,
@@ -384,7 +401,7 @@ class CondaBuildPack(BaseImage):
             self.kernel_env_cutoff_version
         )
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_script_files(self):
         """preassembly only requires environment.yml
 
@@ -392,23 +409,21 @@ class CondaBuildPack(BaseImage):
         repo contents change
         """
         assemble_files = super().get_preassemble_script_files()
-        if self._should_preassemble_env:
-            environment_yml = self.binder_path("environment.yml")
-            if os.path.exists(environment_yml):
-                assemble_files[environment_yml] = environment_yml
+        if self._should_preassemble_env and self.environment_yaml_path:
+            assemble_files[self.environment_yaml_path] = self.environment_yaml_path
         return assemble_files
 
-    @lru_cache()
+    @lru_cache
     def get_env_scripts(self):
         """Return series of build-steps specific to this source repository."""
         scripts = []
-        environment_yml = self.binder_path("environment.yml")
         env_prefix = (
             "${KERNEL_PYTHON_PREFIX}"
             if self.separate_kernel_env
             else "${NB_PYTHON_PREFIX}"
         )
-        if os.path.exists(environment_yml):
+
+        if self.environment_yaml_path:
             # TODO: when using micromamba, we call $MAMBA_EXE install -p ...
             # whereas mamba/conda need `env update -p ...` when it's an env.yaml file
             scripts.append(
@@ -416,7 +431,7 @@ class CondaBuildPack(BaseImage):
                     "${NB_USER}",
                     rf"""
                 TIMEFORMAT='time: %3R' \
-                bash -c 'time ${{MAMBA_EXE}} env update -p {env_prefix} --file "{environment_yml}" && \
+                bash -c 'time ${{MAMBA_EXE}} env update -p {env_prefix} --file "{self.environment_yaml_path}" && \
                 time ${{MAMBA_EXE}} clean --all -f -y && \
                 ${{MAMBA_EXE}} list -p {env_prefix} \
                 '
@@ -467,14 +482,14 @@ class CondaBuildPack(BaseImage):
             ]
         return scripts
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_scripts(self):
         scripts = super().get_preassemble_scripts()
         if self._should_preassemble_env:
             scripts.extend(self.get_env_scripts())
         return scripts
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         scripts = super().get_assemble_scripts()
         if not self._should_preassemble_env:
@@ -640,4 +655,4 @@ env DISABLE_V8_COMPILE_CACHE=1 bash -c 'if [ \\"$(jupyter lab --version | cut -d
 
     def detect(self):
         """Check if current repo should be built with the Conda BuildPack."""
-        return os.path.exists(self.binder_path("environment.yml")) and super().detect()
+        return bool(self.environment_yaml_path)

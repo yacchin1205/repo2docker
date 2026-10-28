@@ -16,7 +16,6 @@ import shutil
 import sys
 import tempfile
 import time
-import warnings
 from urllib.parse import urlparse
 
 import entrypoints
@@ -38,7 +37,7 @@ from .buildpacks import (
     RBuildPack,
 )
 from .engine import BuildError, ContainerEngineException, ImageLoadError
-from .utils import ByteSpecification, R2dState, chdir, get_platform
+from .utils import ByteSpecification, R2dState, chdir, get_free_port, get_platform
 
 
 class Repo2Docker(Application):
@@ -168,12 +167,22 @@ class Repo2Docker(Application):
     build_memory_limit = ByteSpecification(
         0,
         help="""
-        Total memory that can be used by the docker image building process.
+        Unsupported.
 
-        Set to 0 for no limits.
+        When using docker, please use `docker buildx create` to create a new buildkit
+        builder with appropriate limits instead.
         """,
         config=True,
     )
+
+    @observe("build_memory_limit")
+    def build_memory_limit_changed(self, change):
+        print("Setting build_memory_limit is not supported", file=sys.stderr)
+        print(
+            "Check your build engine documentation to set memory limits. Use `docker buildx create` if using the default builder to create a custom builder with appropriate memory limits",
+            file=sys.stderr,
+        )
+        sys.exit(-1)
 
     volumes = Dict(
         {},
@@ -269,7 +278,7 @@ class Repo2Docker(Application):
         """
         p = get_platform()
         if p == "linux/arm64":
-            warnings.warn(
+            self.log.warning(
                 "Building for linux/arm64 is experimental. "
                 "To use the recommended platform set --Repo2Docker.platform=linux/amd64. "
                 "To silence this warning set --Repo2Docker.platform=linux/arm64."
@@ -452,7 +461,7 @@ class Repo2Docker(Application):
     )
 
     base_image = Unicode(
-        "docker.io/library/buildpack-deps:jammy",
+        "docker.io/library/buildpack-deps:24.04",
         config=True,
         help="""
         Base image to use when building docker images.
@@ -565,56 +574,6 @@ class Repo2Docker(Application):
         if self.volumes and not self.run:
             raise ValueError("Cannot mount volumes if container is not run")
 
-    def push_image(self):
-        """Push docker image to registry"""
-        client = self.get_engine()
-        # Build a progress setup for each layer, and only emit per-layer
-        # info every 1.5s
-        progress_layers = {}
-        layers = {}
-        last_emit_time = time.time()
-        for chunk in client.push(self.output_image_spec):
-            if client.string_output:
-                self.log.info(chunk, extra=dict(phase=R2dState.PUSHING))
-                continue
-            # else this is Docker output
-
-            # each chunk can be one or more lines of json events
-            # split lines here in case multiple are delivered at once
-            for line in chunk.splitlines():
-                line = line.decode("utf-8", errors="replace")
-                try:
-                    progress = json.loads(line)
-                except Exception as e:
-                    self.log.warning("Not a JSON progress line: %r", line)
-                    continue
-                if "error" in progress:
-                    self.log.error(progress["error"], extra=dict(phase=R2dState.FAILED))
-                    raise ImageLoadError(progress["error"])
-                if "id" not in progress:
-                    continue
-                # deprecated truncated-progress data
-                if "progressDetail" in progress and progress["progressDetail"]:
-                    progress_layers[progress["id"]] = progress["progressDetail"]
-                else:
-                    progress_layers[progress["id"]] = progress["status"]
-                # include full progress data for each layer in 'layers' data
-                layers[progress["id"]] = progress
-                if time.time() - last_emit_time > 1.5:
-                    self.log.info(
-                        "Pushing image\n",
-                        extra=dict(
-                            progress=progress_layers,
-                            layers=layers,
-                            phase=R2dState.PUSHING,
-                        ),
-                    )
-                    last_emit_time = time.time()
-        self.log.info(
-            f"Successfully pushed {self.output_image_spec}",
-            extra=dict(phase=R2dState.PUSHING),
-        )
-
     def run_image(self):
         """Run docker container from built image
 
@@ -632,7 +591,11 @@ class Repo2Docker(Application):
 
         docker_host = os.environ.get("DOCKER_HOST")
         if docker_host:
-            host_name = urlparse(docker_host).hostname
+            docker_host_parsed = urlparse(docker_host)
+            if docker_host_parsed.scheme == "unix":
+                host_name = "127.0.0.1"
+            else:
+                host_name = docker_host_parsed.hostname
         else:
             host_name = "127.0.0.1"
         self.hostname = host_name
@@ -653,7 +616,7 @@ class Repo2Docker(Application):
                 container_port = int(container_port_proto.split("/", 1)[0])
             else:
                 # no port specified, pick a random one
-                container_port = host_port = str(self._get_free_port())
+                container_port = host_port = str(get_free_port())
                 self.ports = {f"{container_port}/tcp": host_port}
             self.port = host_port
             # To use the option --NotebookApp.custom_display_url
@@ -664,7 +627,7 @@ class Repo2Docker(Application):
                 "notebook",
                 "--ip=0.0.0.0",
                 f"--port={container_port}",
-                f"--ServerApp.custom_display_url=http://{host_name}:{host_port}",
+                f"--ServerApp.custom_display_url=http://{self.hostname}:{self.port}",
                 "--ServerApp.default_url=/lab",
             ]
         else:
@@ -737,30 +700,14 @@ class Repo2Docker(Application):
             if exit_code:
                 sys.exit(exit_code)
 
-    def _get_free_port(self):
-        """
-        Hacky method to get a free random port on local host
-        """
-        import socket
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(("", 0))
-        port = s.getsockname()[1]
-        s.close()
-        return port
-
     def find_image(self):
         # if this is a dry run it is Ok for dockerd to be unreachable so we
         # always return False for dry runs.
         if self.dry_run:
             return False
         # check if we already have an image for this content
-        client = self.get_engine()
-        for image in client.images():
-            for tag in image.tags:
-                if tag == self.output_image_spec + ":latest":
-                    return True
-        return False
+        engine = self.get_engine()
+        return engine.inspect_image(self.output_image_spec) is not None
 
     def build(self):
         """
@@ -792,7 +739,10 @@ class Repo2Docker(Application):
         try:
             self.fetch(self.repo, self.ref, checkout_path)
 
-            if self.find_image():
+            if self.find_image() and not self.push:
+                # If push is requested we don't have a general way to query the registry.
+                # ContainerEngine.build() also handles pushing, so always "build" and
+                # rely on the implementation to decide whether to rebuild.
                 self.log.info(
                     f"Reusing existing image ({self.output_image_spec}), not building."
                 )
@@ -817,9 +767,15 @@ class Repo2Docker(Application):
                         picked_buildpack = bp
                         break
                 else:
-                    picked_buildpack = self.default_buildpack(
-                        base_image=self.base_image
-                    )
+                    if self.default_buildpack:
+                        picked_buildpack = self.default_buildpack(
+                            base_image=self.base_image
+                        )
+                    else:
+                        self.log.error(
+                            "No environment specification found. See https://repo2docker.readthedocs.io/en/latest/configuration/ for supported files.\n"
+                        )
+                        self.exit(1)
 
                 picked_buildpack.platform = self.platform
                 picked_buildpack.appendix = self.appendix
@@ -856,13 +812,20 @@ class Repo2Docker(Application):
                         extra=dict(phase=R2dState.BUILDING),
                     )
 
+                    extra_build_kwargs = self.extra_build_kwargs.copy()
+                    # Set "push" and "load" parameters in a backwards compat way, without
+                    # having to change the signature of every buildpack
+                    extra_build_kwargs["push"] = self.push
+                    extra_build_kwargs["load"] = self.run
+
                     for l in picked_buildpack.build(
                         docker_client,
                         self.output_image_spec,
+                        # This is deprecated, but passing it anyway to not break backwards compatibility
                         self.build_memory_limit,
                         build_args,
                         self.cache_from,
-                        self.extra_build_kwargs,
+                        extra_build_kwargs,
                         platform=self.platform,
                     ):
                         if docker_client.string_output:
@@ -893,9 +856,6 @@ class Repo2Docker(Application):
 
     def start(self):
         self.build()
-
-        if self.push:
-            self.push_image()
 
         if self.run:
             self.run_image()

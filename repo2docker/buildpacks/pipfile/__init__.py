@@ -80,7 +80,7 @@ class PipfileBuildPack(CondaBuildPack):
             )
             return self._python_version
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_script_files(self):
         """Return files needed for preassembly"""
         files = super().get_preassemble_script_files()
@@ -90,7 +90,7 @@ class PipfileBuildPack(CondaBuildPack):
                 files[path] = path
         return files
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_scripts(self):
         """scripts to run prior to staging the repo contents"""
         scripts = super().get_preassemble_scripts()
@@ -108,7 +108,7 @@ class PipfileBuildPack(CondaBuildPack):
         )
         return scripts
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         """Return series of build-steps specific to this repository."""
         # If we have either Pipfile.lock, Pipfile, or runtime.txt declare the
@@ -187,12 +187,9 @@ class PipfileBuildPack(CondaBuildPack):
     def detect(self):
         """Check if current repo should be built with the Pipfile buildpack."""
         # first make sure python is not explicitly unwanted
-        runtime_txt = self.binder_path("runtime.txt")
-        if os.path.exists(runtime_txt):
-            with open(runtime_txt) as f:
-                runtime = f.read().strip()
-            if not runtime.startswith("python-"):
-                return False
+        name = self.runtime[0]
+        if name and name != "python":
+            return False
 
         pipfile = self.binder_path("Pipfile")
         pipfile_lock = self.binder_path("Pipfile.lock")

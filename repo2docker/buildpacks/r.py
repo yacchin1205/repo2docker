@@ -1,6 +1,7 @@
 import datetime
 import os
 import re
+import warnings
 from functools import lru_cache
 
 import requests
@@ -47,21 +48,6 @@ class RBuildPack(PythonBuildPack):
     """
 
     @property
-    def runtime(self):
-        """
-        Return contents of runtime.txt if it exists, '' otherwise
-        """
-        if not hasattr(self, "_runtime"):
-            runtime_path = self.binder_path("runtime.txt")
-            try:
-                with open(runtime_path) as f:
-                    self._runtime = f.read().strip()
-            except FileNotFoundError:
-                self._runtime = ""
-
-        return self._runtime
-
-    @property
     def r_version(self):
         """Detect the R version for a given `runtime.txt`
 
@@ -70,7 +56,10 @@ class RBuildPack(PythonBuildPack):
         """
         # Available versions at https://cran.r-project.org/src/base/
         version_map = {
-            "4.2": "4.2.1",
+            "4.5": "4.5.1",
+            "4.4": "4.4.2",
+            "4.3": "4.3.3",
+            "4.2": "4.2.3",
             "4.1": "4.1.3",
             "4.0": "4.0.5",
             "3.6": "3.6.3",
@@ -86,18 +75,35 @@ class RBuildPack(PythonBuildPack):
         #       - tests/unit/test_r.py -> test_version_specification
         #       - tests/r/r-rspm-apt/verify
         #
-        r_version = version_map["4.2"]
+        r_version = version_map["4.4"]
 
         if not hasattr(self, "_r_version"):
-            parts = self.runtime.split("-")
-            # If runtime.txt is not set, or if it isn't of the form r-<version>-<yyyy>-<mm>-<dd>,
+            _, version, date = self.runtime
+            # If runtime.txt is not set, or if it isn't of the form r-<version>-*,
             # we don't use any of it in determining r version and just use the default
-            if len(parts) == 5:
-                r_version = parts[1]
+            if version:
+                r_version = version
                 # For versions of form x.y, we want to explicitly provide x.y.z - latest patchlevel
                 # available. Users can however explicitly specify the full version to get something specific
                 if r_version in version_map:
                     r_version = version_map[r_version]
+                else:
+                    r_version_parts = r_version.split(".")
+                    if len(r_version_parts) == 3:
+                        self.log.info(
+                            f"Using R full version, {r_version}, provided by user."
+                        )
+                    else:
+                        # repo2docker fails earlier with a meaningful message to the user.
+                        # If repo2docker doesn't fail here, repo2docker might fail later
+                        # without a meaningful message to the user.
+                        raise RuntimeError(
+                            f"R version {r_version} is not supported. Please open an issue at https://github.com/jupyterhub/repo2docker/issues/new/choose.",
+                        )
+            else:
+                self.log.warning(
+                    f"R version unspecified, using default R version {r_version}. You can specify the R version in runtime.txt."
+                )
 
             # translate to the full version string
             self._r_version = r_version
@@ -112,15 +118,11 @@ class RBuildPack(PythonBuildPack):
         Returns '' if no date is specified
         """
         if not hasattr(self, "_checkpoint_date"):
-            match = re.match(r"r-(\d.\d(.\d)?-)?(\d\d\d\d)-(\d\d)-(\d\d)", self.runtime)
-            if not match:
-                self._checkpoint_date = False
+            name, version, date = self.runtime
+            if name == "r" and date:
+                self._checkpoint_date = date
             else:
-                # turn the last three groups of the match into a date
-                self._checkpoint_date = datetime.date(
-                    *[int(s) for s in match.groups()[-3:]]
-                )
-
+                self._checkpoint_date = False
         return self._checkpoint_date
 
     def detect(self):
@@ -138,16 +140,12 @@ class RBuildPack(PythonBuildPack):
 
         description_R = "DESCRIPTION"
         if not self.binder_dir and os.path.exists(description_R):
-            if not self.checkpoint_date:
-                # no R snapshot date set through runtime.txt
-                # Set it to two days ago from today
-                self._checkpoint_date = datetime.date.today() - datetime.timedelta(
-                    days=2
-                )
-                self._runtime = f"r-{str(self._checkpoint_date)}"
+            # no R snapshot date set through runtime.txt
+            # Set it to two days ago from today
+            self._checkpoint_date = datetime.date.today() - datetime.timedelta(days=2)
             return True
 
-    @lru_cache()
+    @lru_cache
     def get_env(self):
         """
         Set custom env vars needed for RStudio to load
@@ -162,7 +160,7 @@ class RBuildPack(PythonBuildPack):
             ("LD_LIBRARY_PATH", "${R_HOME}/lib:${LD_LIBRARY_PATH}"),
         ]
 
-    @lru_cache()
+    @lru_cache
     def get_path(self):
         """
         Return paths to be added to the PATH environment variable.
@@ -172,7 +170,7 @@ class RBuildPack(PythonBuildPack):
         """
         return super().get_path() + ["/usr/lib/rstudio-server/bin/"]
 
-    @lru_cache()
+    @lru_cache
     def get_build_env(self):
         """
         Return environment variables to be set.
@@ -186,7 +184,7 @@ class RBuildPack(PythonBuildPack):
             ("R_LIBS_USER", "${APP_BASE}/rlibs")
         ]
 
-    @lru_cache()
+    @lru_cache
     def get_packages(self):
         """
         Return list of packages to be installed.
@@ -205,7 +203,7 @@ class RBuildPack(PythonBuildPack):
 
         return super().get_packages().union(packages)
 
-    @lru_cache()
+    @lru_cache
     def get_rspm_snapshot_url(self, snapshot_date, max_days_prior=7):
         for i in range(max_days_prior):
             snapshots = requests.post(
@@ -233,7 +231,7 @@ class RBuildPack(PythonBuildPack):
             )
         )
 
-    @lru_cache()
+    @lru_cache
     def get_devtools_snapshot_url(self):
         """
         Return url of snapshot to use for getting devtools install
@@ -250,7 +248,7 @@ class RBuildPack(PythonBuildPack):
         # appropriate binary packages without having to hard code version names here.
         return "https://packagemanager.posit.co/all/__linux__/${VERSION_CODENAME}/2022-06-03+Y3JhbiwyOjQ1MjYyMTU7RkM5ODcwN0M"
 
-    @lru_cache()
+    @lru_cache
     def get_build_scripts(self):
         """
         Return series of build-steps common to all R repositories
@@ -364,7 +362,7 @@ class RBuildPack(PythonBuildPack):
 
         return super().get_build_scripts() + scripts
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_script_files(self):
         files = super().get_preassemble_script_files()
         installR_path = self.binder_path("install.R")
@@ -373,7 +371,7 @@ class RBuildPack(PythonBuildPack):
 
         return files
 
-    @lru_cache()
+    @lru_cache
     def get_preassemble_scripts(self):
         """Install contents of install.R
 
@@ -399,7 +397,7 @@ class RBuildPack(PythonBuildPack):
 
         return super().get_preassemble_scripts() + scripts
 
-    @lru_cache()
+    @lru_cache
     def get_assemble_scripts(self):
         """Install the dependencies of or the repository itself"""
         assemble_scripts = super().get_assemble_scripts()

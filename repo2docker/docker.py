@@ -2,12 +2,38 @@
 Docker container engine for repo2docker
 """
 
+import json
+import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
+from argparse import ArgumentError
+from contextlib import ExitStack, contextmanager
+from pathlib import Path
+
 from iso8601 import parse_date
-from traitlets import Dict
+from traitlets import Dict, List, Unicode, default
 
 import docker
 
-from .engine import Container, ContainerEngine, ContainerEngineException, Image
+from .engine import Container, ContainerEngine, Image
+from .utils import execute_cmd
+
+# The DOCKER_HOST environment variable is used by Docker to set a remote host.
+# The same DOCKER_HOST environment variable is also used
+# by the official Software Development Kit (SDK) and other libraries
+# as a way to select the socket to communicate with.
+# Because repo2docker uses the official Docker SDK,
+# Podman users MUST configure the DOCKER_HOST environment variable.
+DOCKER_HOST = os.getenv("DOCKER_HOST")
+# It is possible for a user to create a Podman socket
+# that does not include the string "podman"
+# but expect the string "podman" is good enough for repo2docker use case.
+if DOCKER_HOST is not None and DOCKER_HOST.find("podman") != -1:
+    DOCKER_CLI = "podman"
+else:
+    DOCKER_CLI = "docker"
 
 
 class DockerContainer(Container):
@@ -53,7 +79,43 @@ class DockerEngine(ContainerEngine):
     https://docker-py.readthedocs.io/en/4.2.0/api.html#module-docker.api.build
     """
 
-    string_output = False
+    string_output = True
+
+    _container_cli = None
+
+    @property
+    def container_cli(self):
+        if self._container_cli is not None:
+            return self._container_cli
+
+        cli = DOCKER_CLI
+
+        cli_version_call = [cli, "version"]
+        try:
+            docker_version = subprocess.run(
+                cli_version_call, stdout=subprocess.DEVNULL, check=True
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            raise RuntimeError(
+                f"The {cli} commandline client must be installed: {e}"
+            ) from None
+
+        # docker buildx is based in a plugin that might not be installed
+        # https://github.com/docker/buildx
+        #
+        # podman buildx command is an alias of podman build.
+        # Not all buildx build features are available in Podman.
+        cli_buildx_version_call = [cli, "buildx", "version"]
+        try:
+            docker_buildx_version = subprocess.run(
+                cli_buildx_version_call, stdout=subprocess.DEVNULL, check=True
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            raise RuntimeError(f"The buildx plugin must be installed: {e}") from None
+
+        self._container_cli = cli
+
+        return self._container_cli
 
     extra_init_args = Dict(
         {},
@@ -69,19 +131,19 @@ class DockerEngine(ContainerEngine):
         config=True,
     )
 
-    def __init__(self, *, parent):
-        super().__init__(parent=parent)
-        try:
-            kwargs = docker.utils.kwargs_from_env()
-            kwargs.update(self.extra_init_args)
-            kwargs.setdefault("version", "auto")
-            self._apiclient = docker.APIClient(**kwargs)
-        except docker.errors.DockerException as e:
-            raise ContainerEngineException("Check if docker is running on the host.", e)
+    extra_buildx_build_args = List(
+        Unicode(),
+        help="""
+        Extra commandline arguments to pass to `docker buildx build` when building the image.
+        """,
+        config=True,
+    )
 
     def build(
         self,
         *,
+        push=False,
+        load=False,
         buildargs=None,
         cache_from=None,
         container_limits=None,
@@ -94,35 +156,116 @@ class DockerEngine(ContainerEngine):
         platform=None,
         **kwargs,
     ):
-        return self._apiclient.build(
-            buildargs=buildargs,
-            cache_from=cache_from,
-            container_limits=container_limits,
-            forcerm=True,
-            rm=True,
-            tag=tag,
-            custom_context=custom_context,
-            decode=True,
-            dockerfile=dockerfile,
-            fileobj=fileobj,
-            path=path,
-            labels=labels,
-            platform=platform,
-            **kwargs,
-        )
+        args = [self.container_cli, "buildx", "build", "--progress", "plain"]
+        if load:
+            if push:
+                raise ValueError(
+                    "Setting push=True and load=True is currently not supported"
+                )
+            args.append("--load")
 
-    def images(self):
-        images = self._apiclient.images()
-        return [Image(tags=image["RepoTags"]) for image in images]
+        if push:
+            args.append("--push")
+
+        if buildargs:
+            for k, v in buildargs.items():
+                args += ["--build-arg", f"{k}={v}"]
+
+        if cache_from:
+            for cf in cache_from:
+                args += ["--cache-from", cf]
+
+        if dockerfile:
+            args += ["--file", dockerfile]
+
+        if tag:
+            args += ["--tag", tag]
+
+        if labels:
+            for k, v in labels.items():
+                args += ["--label", f"{k}={v}"]
+
+        if platform:
+            args += ["--platform", platform]
+
+        # place extra args right *before* the path
+        args += self.extra_buildx_build_args
+
+        with ExitStack() as stack:
+            if self.registry_credentials:
+                stack.enter_context(self.docker_login(**self.registry_credentials))
+            if fileobj:
+                with tempfile.TemporaryDirectory() as d:
+                    tarf = tarfile.open(fileobj=fileobj)
+                    tarf.extractall(d)
+
+                    args += [d]
+
+                    yield from execute_cmd(args, True)
+            else:
+                # Assume 'path' is passed in
+                args += [path]
+
+                yield from execute_cmd(args, True)
 
     def inspect_image(self, image):
-        image = self._apiclient.inspect_image(image)
-        return Image(tags=image["RepoTags"], config=image["Config"])
+        """
+        Return image configuration if it exists, otherwise None
+        """
+        proc = subprocess.run(
+            [self.container_cli, "image", "inspect", image], capture_output=True
+        )
 
-    def push(self, image_spec):
-        if self.registry_credentials:
-            self._apiclient.login(**self.registry_credentials)
-        return self._apiclient.push(image_spec, stream=True)
+        if proc.returncode != 0:
+            return None
+
+        config = json.loads(proc.stdout.decode())[0]
+        tags = config["RepoTags"]
+        oci_image_configuration = config["Config"]
+
+        # WorkingDir is optional but docker always include it.
+        # https://github.com/containers/podman/discussions/27313
+        if "WorkingDir" not in oci_image_configuration:
+            oci_image_configuration["WorkingDir"] = ""
+
+        return Image(tags=tags, config=oci_image_configuration)
+
+    @contextmanager
+    def docker_login(self, username, password, registry):
+        # Determine existing DOCKER_CONFIG
+        old_dc_path = os.environ.get("DOCKER_CONFIG")
+        if old_dc_path is None:
+            dc_path = Path("~/.docker/config.json").expanduser()
+        else:
+            dc_path = Path(old_dc_path)
+
+        with tempfile.TemporaryDirectory() as d:
+            new_dc_path = Path(d) / "config.json"
+            if dc_path.exists():
+                # If there is an existing DOCKER_CONFIG, copy it to new location so we inherit
+                # whatever configuration the user has already set
+                shutil.copy2(dc_path, new_dc_path)
+
+            os.environ["DOCKER_CONFIG"] = d
+            try:
+                subprocess.run(
+                    [
+                        self.container_cli,
+                        "login",
+                        "--username",
+                        username,
+                        "--password-stdin",
+                        registry,
+                    ],
+                    input=password.encode(),
+                    check=True,
+                )
+                yield
+            finally:
+                if old_dc_path:
+                    os.environ["DOCKER_CONFIG"] = old_dc_path
+                else:
+                    del os.environ["DOCKER_CONFIG"]
 
     def run(
         self,

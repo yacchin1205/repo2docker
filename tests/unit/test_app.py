@@ -1,4 +1,4 @@
-import errno
+import os
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -8,35 +8,6 @@ import pytest
 import docker
 from repo2docker.__main__ import make_r2d
 from repo2docker.app import Repo2Docker
-from repo2docker.utils import chdir
-
-
-def test_find_image():
-    images = [{"RepoTags": ["some-org/some-repo:latest"]}]
-
-    with patch("repo2docker.docker.docker.APIClient") as FakeDockerClient:
-        instance = FakeDockerClient.return_value
-        instance.images.return_value = images
-
-        r2d = Repo2Docker()
-        r2d.output_image_spec = "some-org/some-repo"
-        assert r2d.find_image()
-
-        instance.images.assert_called_with()
-
-
-def test_dont_find_image():
-    images = [{"RepoTags": ["some-org/some-image-name:latest"]}]
-
-    with patch("repo2docker.docker.docker.APIClient") as FakeDockerClient:
-        instance = FakeDockerClient.return_value
-        instance.images.return_value = images
-
-        r2d = Repo2Docker()
-        r2d.output_image_spec = "some-org/some-other-image-name"
-        assert not r2d.find_image()
-
-        instance.images.assert_called_with()
 
 
 def test_image_name_remains_unchanged():
@@ -78,19 +49,22 @@ def test_local_dir_image_name(repo_with_content):
     )
 
 
-def test_build_kwargs(repo_with_content):
+def test_extra_buildx_build_args(repo_with_content):
     upstream, sha1 = repo_with_content
-    argv = [upstream]
+    argv = ["--DockerEngine.extra_buildx_build_args=--check", upstream]
     app = make_r2d(argv)
-    app.extra_build_kwargs = {"somekey": "somevalue"}
-
-    with patch.object(docker.APIClient, "build") as builds:
-        builds.return_value = []
+    with patch("repo2docker.docker.execute_cmd") as execute_cmd:
         app.build()
-    builds.assert_called_once()
-    args, kwargs = builds.call_args
-    assert "somekey" in kwargs
-    assert kwargs["somekey"] == "somevalue"
+
+    args, kwargs = execute_cmd.call_args
+    cmd = args[0]
+    docker_host = os.environ.get("DOCKER_HOST")
+    if docker_host and docker_host.find("podman") != -1:
+        assert cmd[:3] == ["podman", "buildx", "build"]
+    else:
+        assert cmd[:3] == ["docker", "buildx", "build"]
+    # make sure it's inserted before the end
+    assert "--check" in cmd[:-1]
 
 
 def test_run_kwargs(repo_with_content):
@@ -107,43 +81,12 @@ def test_run_kwargs(repo_with_content):
     assert kwargs["somekey"] == "somevalue"
 
 
-def test_root_not_allowed():
-    with TemporaryDirectory() as src, patch("os.geteuid") as geteuid:
-        geteuid.return_value = 0
-        argv = [src]
-        with pytest.raises(SystemExit) as exc:
-            app = make_r2d(argv)
-            assert exc.code == 1
-
-        with pytest.raises(ValueError):
-            app = Repo2Docker(repo=src, run=False)
-            app.build()
-
-        app = Repo2Docker(repo=src, user_id=1000, user_name="jovyan", run=False)
-        app.initialize()
-        with patch.object(docker.APIClient, "build") as builds:
-            builds.return_value = []
-            app.build()
-        builds.assert_called_once()
-
-
-def test_dryrun_works_without_docker(tmpdir, capsys):
-    with chdir(tmpdir):
-        with patch.object(docker, "APIClient") as client:
-            client.side_effect = docker.errors.DockerException("Error: no Docker")
-            app = Repo2Docker(dry_run=True)
-            app.build()
-            captured = capsys.readouterr()
-            assert "Error: no Docker" not in captured.err
-
-
-def test_error_log_without_docker(tmpdir, capsys):
-    with chdir(tmpdir):
-        with patch.object(docker, "APIClient") as client:
-            client.side_effect = docker.errors.DockerException("Error: no Docker")
-            app = Repo2Docker()
-
-            with pytest.raises(SystemExit):
-                app.build()
-                captured = capsys.readouterr()
-                assert "Error: no Docker" in captured.err
+def test_no_default(tmp_path, capsys):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    argv = ["--Repo2Docker.default_buildpack=None", str(empty)]
+    app = make_r2d(argv)
+    with pytest.raises(SystemExit):
+        app.build()
+    captured = capsys.readouterr()
+    assert "No environment specification found" in captured.err
