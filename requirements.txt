@@ -6,7 +6,7 @@
 #
 aiofiles==25.1.0
     # via osfclient
-anyio==4.14.2
+anyio==4.15.1
     # via httpx
 beautifulsoup4==4.15.0
     # via jupyter-repo2docker
@@ -46,7 +46,7 @@ osfclient @ git+https://github.com/RCOSDP/rdmclient.git@master
     # via jupyter-repo2docker
 packaging==26.1
     # via jupyter-repo2docker
-python-dateutil==2.9.0.post0
+python-dateutil==3.0.0
     # via osfclient
 python-json-logger==4.1.0
     # via jupyter-repo2docker
@@ -62,11 +62,11 @@ six==1.17.0
     # via
     #   osfclient
     #   python-dateutil
-soupsieve==2.8.4
+soupsieve==3.0.4
     # via beautifulsoup4
 toml==0.10.2
     # via jupyter-repo2docker
-tqdm==4.68.4
+tqdm==4.70.1
     # via osfclient
 traitlets==5.14.3
     # via jupyter-repo2docker
@@ -74,7 +74,9 @@ typing-extensions==4.16.0
     # via
     #   anyio
     #   beautifulsoup4
-tzlocal==5.4.4
+tzdata==2026.5
+    # via python-dateutil
+tzlocal==5.4.5
     # via osfclient
 urllib3==2.6.3
     # via
