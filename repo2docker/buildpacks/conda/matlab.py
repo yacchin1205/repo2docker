@@ -3,6 +3,7 @@ import requests
 
 UBUNTU_NAMES_FOR_BASE_IMAGES = {
     "buildpack-deps:jammy": "ubuntu22.04",
+    "buildpack-deps:24.04": "ubuntu24.04",
 }
 
 def matlab_requirements_scripts(release, base_image):
@@ -55,12 +56,7 @@ def matlab_python_engine_installation_scripts(release, dest_dir):
     
     Based on https://github.com/mathworks-ref-arch/matlab-integration-for-jupyter/blob/a4ac9b9ce5c2880596c77670eddab93f7ef9d4fc/matlab/Dockerfile#L100-L108
     """
-    script = f"""export DEBIAN_FRONTEND=noninteractive && apt-get update \
-    && apt-get install --no-install-recommends -y  python3-distutils \
-    && apt-get clean \
-    && apt-get -y autoremove \
-    && rm -rf /var/lib/apt/lists/* \
-    && cd {dest_dir}/extern/engines/python \
+    script = f"""cd {dest_dir}/extern/engines/python \
     && python setup.py install || true"""
     return [("root", script)]
 
