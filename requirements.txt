@@ -4,8 +4,17 @@
 #
 #    ./scripts/refreeze
 #
+aiofiles==25.1.0
+    # via osfclient
+anyio==4.14.2
+    # via httpx
+beautifulsoup4==4.15.0
+    # via jupyter-repo2docker
 certifi==2026.2.25
-    # via requests
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
 charset-normalizer==3.4.7
     # via
     #   jupyter-repo2docker
@@ -16,16 +25,29 @@ entrypoints==0.4
     # via jupyter-repo2docker
 escapism==1.1.0
     # via jupyter-repo2docker
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via osfclient
 idna==3.11
-    # via requests
+    # via
+    #   anyio
+    #   httpx
+    #   requests
 iso8601==2.1.0
     # via jupyter-repo2docker
 jinja2==3.1.6
     # via jupyter-repo2docker
 markupsafe==3.0.3
     # via jinja2
+osfclient @ git+https://github.com/RCOSDP/rdmclient.git@master
+    # via jupyter-repo2docker
 packaging==26.1
     # via jupyter-repo2docker
+python-dateutil==2.9.0.post0
+    # via osfclient
 python-json-logger==4.1.0
     # via jupyter-repo2docker
 requests==2.33.1
@@ -36,10 +58,24 @@ ruamel-yaml==0.19.1
     # via jupyter-repo2docker
 semver==3.0.4
     # via jupyter-repo2docker
+six==1.17.0
+    # via
+    #   osfclient
+    #   python-dateutil
+soupsieve==2.8.4
+    # via beautifulsoup4
 toml==0.10.2
     # via jupyter-repo2docker
+tqdm==4.68.4
+    # via osfclient
 traitlets==5.14.3
     # via jupyter-repo2docker
+typing-extensions==4.16.0
+    # via
+    #   anyio
+    #   beautifulsoup4
+tzlocal==5.4.4
+    # via osfclient
 urllib3==2.6.3
     # via
     #   docker
